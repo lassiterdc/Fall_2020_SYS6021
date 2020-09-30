@@ -1,0 +1,76 @@
+---
+title: "Project1"
+author: "Daniel Lassiter, Tom Muhlbaur, and Rachael Stryker"
+date: "9/28/2020"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Loading Data
+
+
+
+```{r}
+#Import libraries
+library(ggplot2)
+library(lattice)
+
+#Set directories:
+sourcedir <- "C:/Users/Daniel/Dropbox/Self organization/Education/UVA/Graduate School/Coursework/Fall_2020/SYS 6021 Linear Statistical Models/Source/"
+traindir <- "C:/Users/Daniel/Dropbox/Self organization/Education/UVA/Graduate School/Coursework/Fall_2020/SYS 6021 Linear Statistical Models/Data/TrainData"
+
+
+
+# Source AccidentInput
+setwd(sourcedir)
+source("AccidentInput.R")
+source("SPM_Panel.R")
+source("PCAplots.R")
+
+# Create a list of data frames for each year of accident data
+
+acts <- file.inputl(traindir)
+
+# Create a data frame with all accidents from all years from 2001 - 2019
+# with columns that are consistent for all of these years
+
+# Get a common set the variables
+
+comvar <- intersect(colnames(acts[[1]]), colnames(acts[[8]]))
+
+# the combined data frame
+
+totacts <- combine.data(acts)
+
+```
+
+## Create a data frame containing only accidents with one or more casualties. Use the variables "INCDTNO", "YEAR", "MONTH", "DAY", "TIMEHR", "TIMEMIN" to determine if there are duplicates in the accident reports with one or more casualties. Report # of duplicates.
+
+```{r}
+totacts$Casualty <- totacts$TOTINJ + totacts$TOTKLD
+totacts_wCasualties <- subset.data.frame(totacts, totacts$Casualty>0)
+totacts_wCasualties_DR <- totacts_wCasualties[!(duplicated(totacts_wCasualties[, c("INCDTNO", "YEAR", "MONTH", "DAY", "TIMEHR", "TIMEMIN")])),]
+
+#Reset rownames (observation #s) for sequential numbering- otherwise they will remain the #s from totacts_wCasualties_DR
+rownames(totacts_wCasualties_DR) <- NULL
+
+plt <- ggplot(data = totacts_wCasualties_DR, aes(x = as.factor(YEAR), y = Casualty)) +
+  geom_boxplot() +
+  coord_flip() +
+  scale_fill_grey(start = 0.5, end = 0.8) +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  ggtitle("Box Plots of Casualtiese") +
+  labs(x = "Year", y = "Casualties")
+
+
+ggplot_build(plt)$data
+
+plt
+
+```
+
+
+
