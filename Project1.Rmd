@@ -4,7 +4,7 @@ author: "Daniel Lassiter, Tom Muhlbaur, and Rachael Stryker"
 date: "9/28/2020"
 output: pdf_document
 ---
-Rachael's new edit
+Rachael new new
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
