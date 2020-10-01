@@ -4,7 +4,7 @@ author: "Daniel Lassiter, Tom Muhlbaur, and Rachael Stryker"
 date: "9/28/2020"
 output: pdf_document
 ---
-Rachael new new
+
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
@@ -15,7 +15,15 @@ The variables that we decided to hone in on for our exploratory data analysis ar
 * Quantitative: CARS (# cars w/hazmat), CARSDMG (# hazmat cars that were damaged or derailed), CARSHZD (# of cars that released hazmat), MONTH, DAY, TIMEHR, TIMEMIN, AMPM, TRNSPD, HIGHSPD
   
 * Qualitative: RR2 (second railroad involved), TYPE (accident type), TYPEQ (car type), Cause (manually assigned from CAUSE), STATION, WEATHER, VISIBLTY
+Extreme Damage:
 
+Hypothesis 1: 
+Hypothesis 2:
+
+Casualties:
+
+Hypothesis 1: The Chicago Station increases the number of casualties. (Null): The Chicago station does not increase the number of casualties
+Hypothesis 2:
 
 ### Loading libraries and data, settign directories, and processing data
 
@@ -23,6 +31,7 @@ The variables that we decided to hone in on for our exploratory data analysis ar
 #Import libraries
 library(ggplot2)
 library(lattice)
+library(plyr)
 
 #Set directories:
 setwd('..')
@@ -147,7 +156,22 @@ tbl
 
 Miscellaneous causes was by far the most frequent accident type  followed by human factors.
 
+### Make a barplot of the nearst station of accidents for all accidents with one or more casualties.
 
+```{r}
+# Use count to see the frequency of occurrences at each Station
+
+y = count(totacts_wCasualties_DR, "STATION")
+
+# Use tabel() to look at the Stations with more than nine occurrences
+xstat100 <- y[y$freq > 9,]
+table(xstat100)
+xstat100
+class(xstat100)
+
+# Use ggplot() to plot the frequency of casualties at the etreme stations./
+ggplot(xstat100, aes(x = STATION, y= freq)) + geom_bar(stat="identity") + theme(text = element_text(size = 5.5))
+```
 
 
 ## Looking at extreme accidents
