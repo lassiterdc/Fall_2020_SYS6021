@@ -4,20 +4,22 @@ author: "Daniel Lassiter, Tom Muhlbaur, and Rachael Stryker"
 date: "9/28/2020"
 output: pdf_document
 ---
+
 Rachael new new
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
+
 # Generating Hypotheses:
+
 The variables that we decided to hone in on for our exploratory data analysis are:
 
-* Quantitative: CARS (# cars w/hazmat), CARSDMG (# hazmat cars that were damaged or derailed), CARSHZD (# of cars that released hazmat), MONTH, DAY, TIMEHR, TIMEMIN, AMPM, TRNSPD, HIGHSPD
-  
-* Qualitative: RR2 (second railroad involved), TYPE (accident type), TYPEQ (car type), Cause (manually assigned from CAUSE), STATION, WEATHER, VISIBLTY
+-   Quantitative: CARS (\# cars w/hazmat), CARSDMG (\# hazmat cars that were damaged or derailed), CARSHZD (\# of cars that released hazmat), MONTH, DAY, TIMEHR, TIMEMIN, AMPM, TRNSPD, HIGHSPD
 
+-   Qualitative: RR2 (second railroad involved), TYPE (accident type), TYPEQ (car type), Cause (manually assigned from CAUSE), STATION, WEATHER, VISIBLTY
 
-### Loading libraries and data, settign directories, and processing data
+## Loading libraries and data, setting directories, and processing data
 
 ```{r}
 #Import libraries
@@ -80,7 +82,9 @@ totacts$Cause[which(substr(totacts$CAUSE, 1, 1) == "E")] <- "(E) Mechanical and 
 totacts$Cause <- factor(totacts$Cause)
 
 ```
+
 ## Looking at casualties
+
 ### Create a data frame containing only accidents with one or more casualties. Use the variables "INCDTNO", "YEAR", "MONTH", "DAY", "TIMEHR", "TIMEMIN" to determine if there are duplicates in the accident reports with one or more casualties. Report number of duplicates.Show a box plot of casualities per accident per year.
 
 ```{r}
@@ -106,17 +110,13 @@ plt
 
 ```
 
-
-
-
 ```{r}
 # ggpairs(totacts_wCasualties_DR[,c("cars", "EQPDMG", "ACCDMG", "TOTINJ", "TOTKLD")])
 
 ```
 
-
-
 ### Make a barplot of the type of accidents for all accidents with one or more casualties.
+
 ```{r}
 library(ggplot2)
 
@@ -130,9 +130,10 @@ ggplot(as.data.frame(table(totacts_wCasualties_DR$TYPE)), aes(x = Var1, y= Freq)
 
 ```
 
-Highway-rail and derailments are the two accident types that most frequently yield one or more casualties.  
+Highway-rail and derailments are the two accident types that most frequently yield one or more casualties.
 
 ### Make a barplot of the cause of accidents for all accidents with one or more casualties.
+
 ```{r}
 # Use table() to see the frequencies
 
@@ -145,10 +146,7 @@ ggplot(tbl, aes(x = Var1, y= Freq)) + geom_bar(stat="identity")
 tbl
 ```
 
-Miscellaneous causes was by far the most frequent accident type  followed by human factors.
-
-
-
+Miscellaneous causes was by far the most frequent accident type followed by human factors.
 
 ## Looking at extreme accidents
 
@@ -181,8 +179,8 @@ frac_cost_x <- round(sum(as.numeric(totacts$ACCDMG[which(totacts$ACCDMG > ggplot
 
 There are `r nrow(xdmg)` outliers which comprise `r frac_cost_x`% of the sum of accident damage across all accidents. `r frac_acts_x`% of all accidents are extreme accidents.
 
-
 ### Make a barplot of the cause of accidents for extreme accidents.
+
 ```{r}
 # Use table() to see the frequencies
 
@@ -195,8 +193,8 @@ ggplot(tbl, aes(x = Var1, y= Freq)) + geom_bar(stat="identity")
 tbl
 ```
 
-
 ### Make a barplot of the cause of accidents for extreme accidents.
+
 ```{r}
 # Use table() to see the frequencies
 
@@ -211,12 +209,6 @@ tbl
 
 ### Box plot of extreme accidents by accident type
 
-
-
-
 # ACCDMG Analysis:
 
-
 # Casualties Analysis:
-
-
