@@ -148,6 +148,84 @@ tbl
 
 Miscellaneous causes was by far the most frequent accident type followed by human factors.
 
+## Next, we will look at how the Station closest to the accident contributes to the number of events that have casualties.
+```{r}
+# Use count to see the frequency of occurrences of casualties at each Station
+
+y = count(totacts_wCasualties_DR, "STATION")
+
+statcas <- aggregate(cbind(Count, Casualty) ~ STATION, transform(totacts_wCasualties_DR, Count = 1), sum)
+statcas
+
+#Make a New variable Ratio
+statcas$Ratio <- rep(NA, nrow(statcas))
+statcas <- transform(statcas, Ratio = Casualty / Count)
+# This new variable, Cause, has to be a factor
+
+statcas$Ratio <- factor(statcas$Ratio)
+
+
+# Use table() to look at the Stations with more than nine occurrences
+xstat10 <- statcas[statcas$Count > 9,]
+#table(xstat10)
+#xstat10
+class(xstat10)
+
+# Use ggplot() to plot the frequency of casualties at the etreme stations./
+ggplot(xstat10, aes(x = STATION, y= freq)) + geom_bar(stat="identity") + theme(text = element_text(size = 5.5))
+ggplot(statcas, aes(x = STATION, y= Ratio)) + geom_bar(stat="identity") + theme(text = element_text(size = 5.5))
+ggplot(xstat10, aes(x = STATION, y= Ratio)) + geom_bar(stat="identity") + theme(text = element_text(size = 5.5))
+```
+
+```{r}
+#boxplots of casualties conditioned on the stations who had a frequency of 10 or more accidents that resulted in a casualty. 
+bwplot(xstat10$STATION~ (totacts_wCasualties_DR$Casualty), main = "Box Plots of Stations with Frequency of Casualties", xlab= "Casualty" )
+xstat10$STATION
+
+```
+
+```{r}
+#Total number of frequencies of casualties at a station relative to the total of other stations' occurences.
+xstatchic <- y[y$STATION == "CHICAGO", ]
+sumfreq <- sum(y$freq)
+totoccur <- xstatchic$freq / sumfreq
+totoccur
+#Only makes up for 1.3% of total occurrences, but that is out of 3417 different stations. Let's look at it compared to with stations with 5 or more occurrences. 
+xstat1 <- y[y$freq > 4,]
+sumfreq1 <- sum(xstat1$freq)
+totoccur1 <- xstatchic$freq / sumfreq1
+totoccur1
+# Makes up for about six percent of occurrences out of 662 stations who have 5 or more occurences of casualties.
+```
+
+## Looking at extreme accidents
+
+```{r}
+dmgbox <- ggplot(totacts, aes(y=ACCDMG)) + geom_boxplot()
+dmgbox
+
+# Names associated with box plot features:
+names(ggplot_build(dmgbox)$data[[1]])
+
+# ymax is the upper whisker - anything above that is an outlier
+upper <- ggplot_build(dmgbox)$data[[1]]$ymax
+
+# create a new data frame with only the outliers
+xdmg <- totacts[totacts$ACCDMG > upper,]
+
+# how many outliers are there
+nrow(xdmg)
+
+# What proportion of accidents are extreme?
+
+frac_acts_x <- round(nrow(xdmg)/nrow(totacts), 2)*100
+
+# Proportion of costs
+
+frac_cost_x <- round(sum(as.numeric(totacts$ACCDMG[which(totacts$ACCDMG > ggplot_build(dmgbox)$data[[1]]$ymax)]))/sum(as.numeric(totacts$ACCDMG)), 2)*100
+
+```
+
 ## Looking at extreme accidents
 
 ```{r}
