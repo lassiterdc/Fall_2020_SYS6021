@@ -11,10 +11,6 @@ knitr::opts_chunk$set(echo = TRUE)
 
 # Generating Hypotheses:
 
-Daniel's edit.
-
-Daniel's second edit.
-
 The variables that we decided to hone in on for our exploratory data analysis are:
 
 -   Quantitative: CARS (\# cars w/hazmat), CARSDMG (\# hazmat cars that were damaged or derailed), CARSHZD (\# of cars that released hazmat), MONTH, DAY, TIMEHR, TIMEMIN, AMPM, TRNSPD, HIGHSPD
@@ -98,7 +94,7 @@ totacts_DR <- totacts[!(duplicated(totacts[, c("INCDTNO", "YEAR", "MONTH", "DAY"
 
 ```{r}
 totacts_DR$Casualty <- totacts_DR$TOTINJ + totacts_DR$TOTKLD
-totacts_wCasualties_DR <- subset.data.frame(totacts_DR, totacts$Casualty>0)
+totacts_wCasualties_DR <- subset.data.frame(totacts_DR, totacts_DR$Casualty>0)
 
 
 #Reset rownames (observation #s) for sequential numbering- otherwise they will remain the #s from totacts_wCasualties_DR
@@ -204,50 +200,53 @@ dark[which(totacts_wCasualties_DR$VISIBLTY =='dark')] <- 1
 dark <- as.factor(dark)
 contrasts(dark)
 
-# Create highway-rail variable
-table(totacts_wCasualties_DR$TYPE)
+# Raining/not raining as variable
+rain <- rep(0, nrow(totacts_wCasualties_DR))
+rain[which(totacts_wCasualties_DR$WEATHER =='rain')] <- 1
+rain <- as.factor(rain)
+contrasts(rain)
 
+# Snowing/not snowing as variable
+snow <- rep(0, nrow(totacts_wCasualties_DR))
+snow[which(totacts_wCasualties_DR$WEATHER =='snow')] <- 1
+snow <- as.factor(snow)
+contrasts(snow)
+
+# Create highway-rail variable
 HwyRail <- rep(0, nrow(totacts_wCasualties_DR))
 HwyRail[which(totacts_wCasualties_DR$TYPE == 'Hwy-Rail')] <- 1 
 HwyRail <- as.factor(HwyRail)
 contrasts(HwyRail)
 
-interaction.plot(HwyRail, dark, totacts_wCasualties_DR$Casualty)
-
-# Interaction between trainspeed and highway-rail accidents
-TrnSpd_box <- ggplot(xdmg, aes(y=TRNSPD)) + geom_boxplot()
+#Create TRNSPD variable
+TrnSpd_box <- ggplot(totacts_wCasualties_DR, aes(y=TRNSPD)) + geom_boxplot()
 
 med <- ggplot_build(TrnSpd_box)$data[[1]]$middle
 
-#Create TRNSPD variable
-TRNSPD.factor <- xdmg$TRNSPD
-TRNSPD.factor[which(xdmg$TRNSPD<med)]<-'low train speed'
-TRNSPD.factor[which(xdmg$TRNSPD>=med)]<-'high train speed'
+TRNSPD.factor <- totacts_wCasualties_DR$TRNSPD
+TRNSPD.factor[which(totacts_wCasualties_DR$TRNSPD<med)]<-'low train speed'
+TRNSPD.factor[which(totacts_wCasualties_DR$TRNSPD>=med)]<-'high train speed'
 TRNSPD.factor <- factor(TRNSPD.factor)
 contrasts(TRNSPD.factor)
 
-# Create CARS variable
-CARS <- rep(0, nrow(xdmg))
-CARS[which(xdmg$CARS > 0)] <- 1
-CARS <- as.factor(CARS)
-contrasts(CARS)
-
-# Create Freight as variable
-Freight <- rep(0, nrow(xdmg))
-Freight[which(xdmg$TYPEQ =='Freight')] <- 1
-Freight <- as.factor(Freight)
-contrasts(Freight)
-
 # Create derailment variable
-Derail <- rep(0, nrow(xdmg))
-Derail[which(xdmg$TYPE == 'Derailment')] <- 1 
+Derail <- rep(0, nrow(totacts_wCasualties_DR))
+Derail[which(totacts_wCasualties_DR$TYPE == 'Derailment')] <- 1 
 Derail <- as.factor(Derail)
-contrasts(xdmg$Derail)
+contrasts(Derail)
 
-# create an interaction plot for TRNSPD and Derailments
-interaction.plot(TRNSPD.factor, CARS, log(xdmg$ACCDMG))
-interaction.plot(TRNSPD.factor, Freight, log(xdmg$ACCDMG))
-interaction.plot(TRNSPD.factor, Derail, log(xdmg$ACCDMG))
+# Interaction of highway rail and dark
+interaction.plot(HwyRail, dark, totacts_wCasualties_DR$Casualty)
+
+# Interaction of highway rail and rain
+interaction.plot(HwyRail, rain, totacts_wCasualties_DR$Casualty)
+
+# Interaction of highway rail and snow
+interaction.plot(HwyRail, snow, totacts_wCasualties_DR$Casualty)
+
+
+# Interaction of highway rail and trainspeed
+interaction.plot(HwyRail, TRNSPD.factor, totacts_wCasualties_DR$Casualty)
 
 ```
 
@@ -269,6 +268,8 @@ xdmg <- totacts_DR[totacts_DR$ACCDMG > upper,]
 
 # how many outliers are there
 nrow(xdmg)
+
+xdmg <- xdmg[-186, ]
 
 # What proportion of accidents are extreme?
 
