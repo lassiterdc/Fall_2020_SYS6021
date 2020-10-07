@@ -8,17 +8,18 @@ output: pdf_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
+
 # Generating Hypotheses:
+
 Daniel's edit.
 
 Daniel's second edit.
 
 The variables that we decided to hone in on for our exploratory data analysis are:
 
-* Quantitative: CARS (# cars w/hazmat), CARSDMG (# hazmat cars that were damaged or derailed), CARSHZD (# of cars that released hazmat), MONTH, DAY, TIMEHR, TIMEMIN, AMPM, TRNSPD, HIGHSPD
-  
-* Qualitative: RR2 (second railroad involved), TYPE (accident type), TYPEQ (car type), Cause (manually assigned from CAUSE), STATION, WEATHER, VISIBLTY
+-   Quantitative: CARS (\# cars w/hazmat), CARSDMG (\# hazmat cars that were damaged or derailed), CARSHZD (\# of cars that released hazmat), MONTH, DAY, TIMEHR, TIMEMIN, AMPM, TRNSPD, HIGHSPD
 
+-   Qualitative: RR2 (second railroad involved), TYPE (accident type), TYPEQ (car type), Cause (manually assigned from CAUSE), STATION, WEATHER, VISIBLTY
 
 ### Loading libraries and data, settign directories, and processing data
 
@@ -60,6 +61,9 @@ totacts <- combine.data(acts)
 
 totacts$TYPE <- factor(totacts$TYPE, labels = c("Derailment", "HeadOn", "Rearend", "Side", "Raking", "BrokenTrain", "Hwy-Rail", "GradeX", "Obstruction", "Explosive", "Fire","Other","SeeNarrative" ))
 
+# Update TYPEQ variable:
+totacts$TYPEQ <- factor(totacts$TYPEQ, labels = c("Freight", "Passenger", "Commuter", "Work",  "Single", "CutofCars", "Yard", "Light", "Maint", "Other", "Other", "Other", "Other", "Other", "Other"))
+
 # Update WEATHER variable:
 
 totacts$WEATHER <- factor(totacts$WEATHER, labels = c("clear", "cloudy", "rain", "fog", "sleet", "snow"))
@@ -70,7 +74,7 @@ totacts$VISIBLTY <- factor(totacts$VISIBLTY, labels = c("dawn", "day", "dusk", "
 
 # Update the cause variable to have more legible values
 
-# Accident cause
+
 totacts$Cause <- rep(NA, nrow(totacts))
 
 totacts$Cause[which(substr(totacts$CAUSE, 1, 1) == "M")] <- "(M) Miscellaneous Causes Not Otherwise Listed"
@@ -79,17 +83,23 @@ totacts$Cause[which(substr(totacts$CAUSE, 1, 1) == "S")] <- "(S) Signal and Comm
 totacts$Cause[which(substr(totacts$CAUSE, 1, 1) == "H")] <- "(H) Train operation - Human Factors"
 totacts$Cause[which(substr(totacts$CAUSE, 1, 1) == "E")] <- "(E) Mechanical and Electrical Failures"
 
-# This new variable, Cause, has to be a factor
 totacts$Cause <- factor(totacts$Cause)
 
+# Remove duplicates
+
+totacts_DR <- totacts[!(duplicated(totacts[, c("INCDTNO", "YEAR", "MONTH", "DAY", "TIMEHR", "TIMEMIN")])),]
+
+
 ```
+
 ## Looking at casualties
+
 ### Create a data frame containing only accidents with one or more casualties. Use the variables "INCDTNO", "YEAR", "MONTH", "DAY", "TIMEHR", "TIMEMIN" to determine if there are duplicates in the accident reports with one or more casualties. Report number of duplicates.Show a box plot of casualities per accident per year.
 
 ```{r}
-totacts$Casualty <- totacts$TOTINJ + totacts$TOTKLD
-totacts_wCasualties <- subset.data.frame(totacts, totacts$Casualty>0)
-totacts_wCasualties_DR <- totacts_wCasualties[!(duplicated(totacts_wCasualties[, c("INCDTNO", "YEAR", "MONTH", "DAY", "TIMEHR", "TIMEMIN")])),]
+totacts_DR$Casualty <- totacts_DR$TOTINJ + totacts_DR$TOTKLD
+totacts_wCasualties_DR <- subset.data.frame(totacts_DR, totacts$Casualty>0)
+
 
 #Reset rownames (observation #s) for sequential numbering- otherwise they will remain the #s from totacts_wCasualties_DR
 rownames(totacts_wCasualties_DR) <- NULL
@@ -109,54 +119,143 @@ plt
 
 ```
 
-
-
-
 ```{r}
 # ggpairs(totacts_wCasualties_DR[,c("cars", "EQPDMG", "ACCDMG", "TOTINJ", "TOTKLD")])
 
 ```
 
+### Bar plots of total # of accidents with 1 or more casualties for all quantitative varaibles.
 
 
-### Make a barplot of the type of accidents for all accidents with one or more casualties.
 ```{r}
 library(ggplot2)
 
-# Use table() to see the frequencies
+# Looking at accidents with 1 or more casualty
+ylab <- "Accidents with 1 or more casualty"
 
+```
+
+```{r}
+## Accident type
+tbl <- as.data.frame(table(totacts_wCasualties_DR$TYPE))
+tbl
+xlab <- "Type"
+ggplot(as.data.frame(tbl), aes(x = Var1, y= Freq)) + xlab(xlab) + ylab(ylab)+ geom_bar(stat="identity")
+```
+* Highway-rail and derailments are the two accident types that most frequently yield one or more casualties.
+
+```{r}
+## Cause
+tbl <- as.data.frame(table(totacts_wCasualties_DR$Cause))
+xlab <- "Cause"
+ggplot(as.data.frame(tbl), aes(x = Var1, y= Freq)) + xlab(xlab) + ylab(ylab)+ geom_bar(stat="identity")
+```
+* Miscellaneous causes was by far the most frequent accident type followed by human factors.
+
+```{r}
+## TypeQ
+tbl <- as.data.frame(table(totacts_wCasualties_DR$TYPEQ))
+xlab <- "TYPEQ"
+ggplot(as.data.frame(tbl), aes(x = Var1, y= Freq)) + xlab(xlab) + ylab(ylab)+ geom_bar(stat="identity")
+```
+* Passenger cars and commuter cars for accidents with casualties.
+
+```{r}
+## Station
+tbl <- as.data.frame(table(totacts_wCasualties_DR$STATION))
+xlab <- "STATION"
+ggplot(as.data.frame(tbl), aes(x = Var1, y= Freq)) + xlab(xlab) + ylab(ylab)+ geom_bar(stat="identity")
+```
+* No single station has more than 50 accidents with casualties so there's probably not enough data to build a model of casualties using station as a varaible.
+
+
+```{r}
+## WEATHER
+tbl <- as.data.frame(table(totacts_wCasualties_DR$WEATHER))
+xlab <- "WEATHER"
+ggplot(as.data.frame(tbl), aes(x = Var1, y= Freq)) + xlab(xlab) + ylab(ylab)+ geom_bar(stat="identity")
+```
+* By far the majority of accidents occurred during clear weather.
+
+
+```{r}
+## VISIBLTY
+tbl <- as.data.frame(table(totacts_wCasualties_DR$VISIBLTY))
+xlab <- "VISIBLTY"
+ggplot(as.data.frame(tbl), aes(x = Var1, y= Freq)) + xlab(xlab) + ylab(ylab)+ geom_bar(stat="identity")
+```
+* Most accidents occurred during the day.
+
+
+
+
+
+### Zooming in on highway-rail type accidents: Interaction Plots between quantitative and qualitative variables.
+
+```{r}
+
+library(MASS)
+library(lindia)
+library(ggplot2)
+
+# Create Night/Not Night as a variable
+dark <- rep(0, nrow(totacts_wCasualties_DR))
+dark[which(totacts_wCasualties_DR$VISIBLTY =='dark')] <- 1
+dark <- as.factor(dark)
+contrasts(dark)
+
+# Create highway-rail variable
 table(totacts_wCasualties_DR$TYPE)
 
-# Use barplot() to graph this
+HwyRail <- rep(0, nrow(totacts_wCasualties_DR))
+HwyRail[which(totacts_wCasualties_DR$TYPE == 'Hwy-Rail')] <- 1 
+HwyRail <- as.factor(HwyRail)
+contrasts(HwyRail)
 
-ggplot(as.data.frame(table(totacts_wCasualties_DR$TYPE)), aes(x = Var1, y= Freq)) + geom_bar(stat="identity")
+interaction.plot(HwyRail, dark, totacts_wCasualties_DR$Casualty)
+
+# Interaction between trainspeed and highway-rail accidents
+TrnSpd_box <- ggplot(xdmg, aes(y=TRNSPD)) + geom_boxplot()
+
+med <- ggplot_build(TrnSpd_box)$data[[1]]$middle
+
+#Create TRNSPD variable
+TRNSPD.factor <- xdmg$TRNSPD
+TRNSPD.factor[which(xdmg$TRNSPD<med)]<-'low train speed'
+TRNSPD.factor[which(xdmg$TRNSPD>=med)]<-'high train speed'
+TRNSPD.factor <- factor(TRNSPD.factor)
+contrasts(TRNSPD.factor)
+
+# Create CARS variable
+CARS <- rep(0, nrow(xdmg))
+CARS[which(xdmg$CARS > 0)] <- 1
+CARS <- as.factor(CARS)
+contrasts(CARS)
+
+# Create Freight as variable
+Freight <- rep(0, nrow(xdmg))
+Freight[which(xdmg$TYPEQ =='Freight')] <- 1
+Freight <- as.factor(Freight)
+contrasts(Freight)
+
+# Create derailment variable
+Derail <- rep(0, nrow(xdmg))
+Derail[which(xdmg$TYPE == 'Derailment')] <- 1 
+Derail <- as.factor(Derail)
+contrasts(xdmg$Derail)
+
+# create an interaction plot for TRNSPD and Derailments
+interaction.plot(TRNSPD.factor, CARS, log(xdmg$ACCDMG))
+interaction.plot(TRNSPD.factor, Freight, log(xdmg$ACCDMG))
+interaction.plot(TRNSPD.factor, Derail, log(xdmg$ACCDMG))
 
 ```
-
-Highway-rail and derailments are the two accident types that most frequently yield one or more casualties.  
-
-### Make a barplot of the cause of accidents for all accidents with one or more casualties.
-```{r}
-# Use table() to see the frequencies
-
-tbl <- as.data.frame(table(totacts_wCasualties_DR$Cause))
-
-# Use barplot() to graph this
-
-ggplot(tbl, aes(x = Var1, y= Freq)) + geom_bar(stat="identity")
-
-tbl
-```
-
-Miscellaneous causes was by far the most frequent accident type  followed by human factors.
-
-
 
 
 ## Looking at extreme accidents
 
 ```{r}
-dmgbox <- ggplot(totacts, aes(y=ACCDMG)) + geom_boxplot()
+dmgbox <- ggplot(totacts_DR, aes(y=ACCDMG)) + geom_boxplot()
 dmgbox
 
 # Names associated with box plot features:
@@ -166,7 +265,7 @@ names(ggplot_build(dmgbox)$data[[1]])
 upper <- ggplot_build(dmgbox)$data[[1]]$ymax
 
 # create a new data frame with only the outliers
-xdmg <- totacts[totacts$ACCDMG > upper,]
+xdmg <- totacts_DR[totacts_DR$ACCDMG > upper,]
 
 # how many outliers are there
 nrow(xdmg)
@@ -179,13 +278,16 @@ frac_acts_x <- round(nrow(xdmg)/nrow(totacts), 2)*100
 
 frac_cost_x <- round(sum(as.numeric(totacts$ACCDMG[which(totacts$ACCDMG > ggplot_build(dmgbox)$data[[1]]$ymax)]))/sum(as.numeric(totacts$ACCDMG)), 2)*100
 
+# Remove 9/11 accident
+
+
 
 ```
 
 There are `r nrow(xdmg)` outliers which comprise `r frac_cost_x`% of the sum of accident damage across all accidents. `r frac_acts_x`% of all accidents are extreme accidents.
 
-
 ### Make a barplot of the cause of accidents for extreme accidents.
+
 ```{r}
 # Use table() to see the frequencies
 
@@ -198,8 +300,8 @@ ggplot(tbl, aes(x = Var1, y= Freq)) + geom_bar(stat="identity")
 tbl
 ```
 
-
 ### Make a barplot of the cause of accidents for extreme accidents.
+
 ```{r}
 # Use table() to see the frequencies
 
@@ -214,12 +316,6 @@ tbl
 
 ### Box plot of extreme accidents by accident type
 
-
-
-
 # ACCDMG Analysis:
 
-
 # Casualties Analysis:
-
-
