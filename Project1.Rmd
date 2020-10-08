@@ -163,7 +163,6 @@ Miscellaneous causes was by far the most frequent accident type  followed by hum
 ## Next, we will look at how the Station closest to the accident contributes to the number of events that have casualties.
 ```{r}
 # Use count to see the frequency of occurrences of casualties at each Station
-
 y = count(totacts_wCasualties_DR, "STATION")
 
 statcas <- aggregate(cbind(Count, Casualty) ~ STATION, transform(totacts_wCasualties_DR, Count = 1), sum)
@@ -176,24 +175,49 @@ statcas <- transform(statcas, Ratio = Casualty / Count)
 
 statcas$Ratio <- factor(statcas$Ratio)
 
-
+statcas
 # Use table() to look at the Stations with more than nine occurrences
 xstat10 <- statcas[statcas$Count > 9,]
 #table(xstat10)
 #xstat10
 class(xstat10)
 
-# Use ggplot() to plot the frequency of casualties at the etreme stations./
-ggplot(xstat10, aes(x = STATION, y= freq)) + geom_bar(stat="identity") + theme(text = element_text(size = 5.5))
-ggplot(statcas, aes(x = STATION, y= Ratio)) + geom_bar(stat="identity") + theme(text = element_text(size = 5.5))
+# Use ggplot() to plot the frequency of casualties at the extreme stations.
+ggplot(xstat10, aes(x = STATION, y= Count)) + geom_bar(stat="identity") + theme(text = element_text(size = 5.5))
+# Use ggplot() to plot the ratio of casualties at the extreme stations.
 ggplot(xstat10, aes(x = STATION, y= Ratio)) + geom_bar(stat="identity") + theme(text = element_text(size = 5.5))
+##Question, how to change the scale of the y axis, the greatest has ten, but below it is three instead of being divided up properly.
 ```
 
 ```{r}
 #boxplots of casualties conditioned on the stations who had a frequency of 10 or more accidents that resulted in a casualty. 
-bwplot(xstat10$STATION~ (totacts_wCasualties_DR$Casualty), main = "Box Plots of Stations with Frequency of Casualties", xlab= "Casualty" )
+bwplot(xstat10$STATION ~ (totacts_wCasualties_DR$Casualty), main = "Box Plots of Stations with Frequency of Casualties", xlab= "Casualty" )
 xstat10$STATION
+# boxplots of accident damage conditioned on accident typw
+bwplot(STATION ~ Casualty, main = "Box Plots of Stations with Casualties",
+xlab = "Casualties", ylab = "Stationes", data = xstat10)
+# Seems like there could have been one major chicago accident?
+which(totacts_wCasualties_DR$STATION == max(totacts_wCasualties_DR$STATION))
+# Nope, the accident with the largest amount of casualties wasn't in Chicago. What if we create a data frame with the stations who have ten or more occurences of casualties.
 
+hsb7 <- totacts_wCasualties_DR[totacts_wCasualties_DR$STATION %in% c("CHICAGO", "SAN ANTONIO", "BALTIMORE", "BEAUMONT", "FORT WORTH", " FRESNO", "GARY", "HOUSTON", "KANSAS CITY", "MADERA", "MEMPHIS", "NEW YORK NEW YORK", "PHILADELPHIA"), ]
+bwplot(STATION ~ Casualty, main = "Box Plots of Stations with Casualties",
+xlab = "Casualties", ylab = "Stations", data = hsb7)
+
+```
+```{r}
+# Create the Chicago variable to look explicitly at casualties in Chicagor
+totacts_wCasualties_DR$Chicago <- (totacts_wCasualties_DR$STATION == "CHICAGO")
+totacts_wCasualties_DR$NChicago <- (totacts_wCasualties_DR$STATION != "CHICAGO")
+# Get interaction plot for Derail and TRNSPD
+# Define cut point for high and low speed
+Casual <- cut(totacts_wCasualties_DR$Casualty, c(1, mean(totacts_wCasualties_DR$Casualty), max(totacts_wCasualties_DR$Casualty)),
+include.lowest = T, labels = c("low casualties", "high casualties"))
+# Plot interaction between Chicago and Casualties
+interaction.plot(totacts_wCasualties_DR$Chicago, totacts_wCasualties_DR$NChicago, totacts_wCasualties_DR$Casualty)
+
+# Plot interaction between Speed and Cars
+interaction.plot(Speed, Cars, log(xdmgnd$ACCDMG))
 ```
 
 ```{r}
