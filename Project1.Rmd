@@ -17,12 +17,28 @@ The variables that we decided to hone in on for our exploratory data analysis ar
 
 -   Qualitative: RR2 (second railroad involved), TYPE (accident type), TYPEQ (car type), Cause (manually assigned from CAUSE), STATION, WEATHER, VISIBLTY
 
-### Loading libraries and data, settign directories, and processing data
+# Loading libraries and data, settign directories, and processing data
 
 ```{r}
 #Import libraries
+library(tidyverse)
+library(tibble)
+library(dplyr)
 library(ggplot2)
+library(ggfortify)
 library(lattice)
+library(GGally)
+library(MASS)
+library(lindia)
+library(ggpubr)
+# install.packages("devtools")
+library(devtools)
+# install_github("vqv/ggbiplot")
+library(ggbiplot)
+library(data.table)
+library(gplots)
+library(boot)
+source("http://www.phaget4.org/R/myImagePlot.R")
 
 #Set directories:
 setwd('..')
@@ -38,39 +54,31 @@ source("AccidentInput.R")
 source("SPM_Panel.R")
 source("PCAplots.R")
 
-# Create a list of data frames for each year of accident data
+# Data Procesing
 
+## Create list of dataframes
 acts <- file.inputl(traindir)
 
-# Create a data frame with all accidents from all years from 2001 - 2019
-# with columns that are consistent for all of these years
 
-# Get a common set the variables
-
-comvar <- intersect(colnames(acts[[1]]), colnames(acts[[8]]))
-
-# the combined data frame
+## Combine all data into a single dataframe
 
 totacts <- combine.data(acts)
 
-# Update the TYPE variable to contain more legible values
+## Process data variables to be easier to work with
 
+### TYPE
 totacts$TYPE <- factor(totacts$TYPE, labels = c("Derailment", "HeadOn", "Rearend", "Side", "Raking", "BrokenTrain", "Hwy-Rail", "GradeX", "Obstruction", "Explosive", "Fire","Other","SeeNarrative" ))
 
-# Update TYPEQ variable:
+### TYPEQ
 totacts$TYPEQ <- factor(totacts$TYPEQ, labels = c("Freight", "Passenger", "Commuter", "Work",  "Single", "CutofCars", "Yard", "Light", "Maint", "Other", "Other", "Other", "Other", "Other", "Other"))
 
-# Update WEATHER variable:
-
+### WEATHER
 totacts$WEATHER <- factor(totacts$WEATHER, labels = c("clear", "cloudy", "rain", "fog", "sleet", "snow"))
 
-# Update the visibility variable
-
+### VISIBLTY
 totacts$VISIBLTY <- factor(totacts$VISIBLTY, labels = c("dawn", "day", "dusk", "dark"))
 
-# Update the cause variable to have more legible values
-
-
+### Cause
 totacts$Cause <- rep(NA, nrow(totacts))
 
 totacts$Cause[which(substr(totacts$CAUSE, 1, 1) == "M")] <- "(M) Miscellaneous Causes Not Otherwise Listed"
@@ -81,242 +89,319 @@ totacts$Cause[which(substr(totacts$CAUSE, 1, 1) == "E")] <- "(E) Mechanical and 
 
 totacts$Cause <- factor(totacts$Cause)
 
-# Remove duplicates
+### Multi Railroad
+totacts$MultiRR <- rep(NA, nrow(totacts))
+totacts$MultiRR[which(totacts$RR2 == "")] <- FALSE
+totacts$MultiRR[which(totacts$RR2 != "")] <- TRUE
 
+### Time of day
+
+for (i in 1:length(totacts)){
+  if (totacts$AMPM[i] == 'PM'){
+    totacts$Time24hr[i] <- totacts$TIMEHR[i] + 12 + totacts$TIMEMIN[i]/60
+  }
+  else{
+    totacts$Time24hr[i] <- totacts$TIMEHR[i] + totacts$TIMEMIN[i]/60
+  }
+}
+
+## Remove duplicates
 totacts_DR <- totacts[!(duplicated(totacts[, c("INCDTNO", "YEAR", "MONTH", "DAY", "TIMEHR", "TIMEMIN")])),]
 
-
-```
-
-## Looking at casualties
-
-### Create a data frame containing only accidents with one or more casualties. Use the variables "INCDTNO", "YEAR", "MONTH", "DAY", "TIMEHR", "TIMEMIN" to determine if there are duplicates in the accident reports with one or more casualties. Report number of duplicates.Show a box plot of casualities per accident per year.
-
-```{r}
-totacts_DR$Casualty <- totacts_DR$TOTINJ + totacts_DR$TOTKLD
+## Create dataframe with only accidents with 1 or more casualty
+totacts_DR$Casualty <- (totacts_DR$TOTINJ + totacts_DR$TOTKLD)
 totacts_wCasualties_DR <- subset.data.frame(totacts_DR, totacts_DR$Casualty>0)
-
-
-#Reset rownames (observation #s) for sequential numbering- otherwise they will remain the #s from totacts_wCasualties_DR
 rownames(totacts_wCasualties_DR) <- NULL
 
-plt <- ggplot(data = totacts_wCasualties_DR, aes(x = as.factor(YEAR), y = Casualty)) +
-  geom_boxplot() +
-  coord_flip() +
-  scale_fill_grey(start = 0.5, end = 0.8) +
-  theme(plot.title = element_text(hjust = 0.5)) +
-  ggtitle("Box Plots of Casualtiese") +
-  labs(x = "Year", y = "Casualties")
+## Creating extreme accident cost dataframe
+plt_box <- ggplot(totacts_DR, aes(y=ACCDMG)) + geom_boxplot()
+upper <- ggplot_build(plt_box)$data[[1]]$ymax
+xdmg <- totacts_DR[totacts_DR$ACCDMG > upper,]
 
+### Remove 9/11
+xdmg <- xdmg[-186, ]
 
-ggplot_build(plt)$data
-
-plt
-
+## Creating extreme casualties dataframe
+plt_box <- ggplot(totacts_wCasualties_DR, aes(y=Casualty)) + geom_boxplot()
+upper <- ggplot_build(plt_box)$data[[1]]$ymax
+xcas <- totacts_DR[totacts_DR$ACCDMG > upper,]
 ```
 
-```{r}
-# ggpairs(totacts_wCasualties_DR[,c("cars", "EQPDMG", "ACCDMG", "TOTINJ", "TOTKLD")])
-
-```
-
-### Bar plots of total # of accidents with 1 or more casualties for all quantitative varaibles.
-
+# Exploratory Data Analysis for Accidents with Casualties
 
 ```{r}
-library(ggplot2)
+# Exploration:
+## Accident frequency by type
+ggplot(as.data.frame(table(totacts_wCasualties_DR$TYPE)), aes(x = Var1, y= Freq)) + geom_bar(stat="identity")
+print("Most accidents with 1 or more casualties are of type highway-rail")
 
-# Looking at accidents with 1 or more casualty
-ylab <- "Accidents with 1 or more casualty"
+## Total casualties by type:
+ggplot(totacts_wCasualties_DR,aes(TYPE,Casualty)) + geom_col(na.rm=TRUE)
+print("Highway-rail is also the category with the most number of casualties, but when comparing this plot with the previous, derailments seem to be more severe per accident.")
 
-```
+## Inspecting extreme events
+plt_box <- ggplot(totacts_wCasualties_DR, aes(y=Casualty)) + geom_boxplot()
+plt_box
+upper <- ggplot_build(plt_box)$data[[1]]$ymax
+print("Upper whisker:")
+upper
 
-```{r}
-## Accident type
-tbl <- as.data.frame(table(totacts_wCasualties_DR$TYPE))
-tbl
-xlab <- "Type"
-ggplot(as.data.frame(tbl), aes(x = Var1, y= Freq)) + xlab(xlab) + ylab(ylab)+ geom_bar(stat="identity")
-```
-* Highway-rail and derailments are the two accident types that most frequently yield one or more casualties.
+tib <- as_tibble(totacts_wCasualties_DR)
 
-```{r}
-## Cause
-tbl <- as.data.frame(table(totacts_wCasualties_DR$Cause))
-xlab <- "Cause"
-ggplot(as.data.frame(tbl), aes(x = Var1, y= Freq)) + xlab(xlab) + ylab(ylab)+ geom_bar(stat="identity")
-```
-* Miscellaneous causes was by far the most frequent accident type followed by human factors.
+print("Number of extreme accidents with more than 3 casualties")
+count(tib %>% filter(Casualty > upper))
 
-```{r}
-## TypeQ
-tbl <- as.data.frame(table(totacts_wCasualties_DR$TYPEQ))
-xlab <- "TYPEQ"
-ggplot(as.data.frame(tbl), aes(x = Var1, y= Freq)) + xlab(xlab) + ylab(ylab)+ geom_bar(stat="identity")
-```
-* Passenger cars and commuter cars for accidents with casualties.
+print("Fraction of total accidents that are above upper whisker:")
+count(tib %>% filter(Casualty > upper))/count(tib)
 
-```{r}
-## Station
-tbl <- as.data.frame(table(totacts_wCasualties_DR$STATION))
-xlab <- "STATION"
-ggplot(as.data.frame(tbl), aes(x = Var1, y= Freq)) + xlab(xlab) + ylab(ylab)+ geom_bar(stat="identity")
-```
-* No single station has more than 50 accidents with casualties so there's probably not enough data to build a model of casualties using station as a varaible.
+print("Fraction of total casualties that occurred in extreme accidents:")
+tot_cas <- tib %>% summarize(Casualties = sum(Casualty))
+xtrm_cas <- tib %>% filter(Casualty > upper) %>% summarize(Casualties = sum(Casualty))
+xtrm_cas/tot_cas
+print("This means that 10% of the accidents are responsible for 64% of casualties.")
 
 
-```{r}
-## WEATHER
-tbl <- as.data.frame(table(totacts_wCasualties_DR$WEATHER))
-xlab <- "WEATHER"
-ggplot(as.data.frame(tbl), aes(x = Var1, y= Freq)) + xlab(xlab) + ylab(ylab)+ geom_bar(stat="identity")
-```
-* By far the majority of accidents occurred during clear weather.
+## Inspecting for potential relationships between categorical variables
+totacts_wCasualties_DR$Cas_factor <- rep(NA, nrow(totacts_wCasualties_DR))
+
+totacts_wCasualties_DR$Cas_factor[which(totacts_wCasualties_DR$Casualty <= 3)] <- "Less than or equal to 3 Casualties"
+totacts_wCasualties_DR$Cas_factor[which(totacts_wCasualties_DR$Casualty > 3)] <- "Greater  to 3 Casualties (Above upper whisker)"
+totacts_wCasualties_DR$Cas_factor <- factor(totacts_wCasualties_DR$Cas_factor)
+
+### (SUM) What other conditions are present for each casualty?
+plt_1 <- ggplot(totacts_wCasualties_DR,aes(TYPE,Casualty,fill=Cause)) + geom_col(na.rm=TRUE)
+
+plt_2 <- ggplot(totacts_wCasualties_DR,aes(TYPE,Casualty,fill=WEATHER)) + geom_col(na.rm=TRUE)
+
+plt_3 <- ggplot(totacts_wCasualties_DR,aes(TYPE,Casualty,fill=VISIBLTY)) + geom_col(na.rm=TRUE)
+
+plt_4 <- ggplot(totacts_wCasualties_DR,aes(TYPE,Casualty,fill=Cas_factor)) + geom_col(na.rm=TRUE)
+
+plt_5 <- ggplot(totacts_wCasualties_DR,aes(TYPE,Casualty,fill=TYPEQ)) + geom_col(na.rm=TRUE)
+
+plt_6 <- ggplot(totacts_wCasualties_DR,aes(TYPE,Casualty,fill=MultiRR)) + geom_col(na.rm=TRUE)
+### (COUNT) What other conditions are present for each accident with a casualty?
+plt_7 <- ggplot(totacts_wCasualties_DR,aes(TYPE,fill=Cause)) + geom_bar(na.rm=TRUE)
+
+plt_8 <- ggplot(totacts_wCasualties_DR,aes(TYPE,fill=WEATHER)) + geom_bar(na.rm=TRUE)
+
+plt_9 <- ggplot(totacts_wCasualties_DR,aes(TYPE,fill=VISIBLTY)) + geom_bar(na.rm=TRUE)
+
+plt_10 <- ggplot(totacts_wCasualties_DR,aes(TYPE,fill=Cas_factor)) + geom_bar(na.rm=TRUE)
+
+plt_11 <- ggplot(totacts_wCasualties_DR,aes(TYPE,fill=TYPEQ)) + geom_bar(na.rm=TRUE)
+
+plt_12 <- ggplot(totacts_wCasualties_DR,aes(TYPE,Casualty,fill=MultiRR)) + geom_col(na.rm=TRUE)
+
+ggarrange(plt_1, plt_2, plt_3, plt_4, plt_5, plt_6, nrow = 2, ncol = 3)
+ggarrange(plt_7, plt_8, plt_9, plt_10, plt_11, plt_12, nrow = 2, ncol = 3)
+
+print("There is a possible interaction between Derailments and Dark Visibility vs. Casualties and Derailments and Cause - Track, Roadbed, and Structures vs. Casualties. Also, unsurprisingly, most accidents with casualties and most total casualties occur on passenger and commuter trains primarily.")
 
 
-```{r}
-## VISIBLTY
-tbl <- as.data.frame(table(totacts_wCasualties_DR$VISIBLTY))
-xlab <- "VISIBLTY"
-ggplot(as.data.frame(tbl), aes(x = Var1, y= Freq)) + xlab(xlab) + ylab(ylab)+ geom_bar(stat="identity")
-```
-* Most accidents occurred during the day.
+## Looking for correlation between quantitative variables and casualties:
+### Variables tested: "Casualty", "TRNSPD", "TONS", "CARS", "TEMP", "POSITON2", "HEADEND1", "HEADEND2", "MIDMAN1", "MIDMAN2", "LOADF1", "LOADF2", "LOADP1", "LOADP2", "ENGRS", "FIREMEN", "CONDUCTR", "BRAKEMEN", "Latitude", "Longitud"
+
+uva.pairs(totacts_wCasualties_DR[, c("Casualty", "TRNSPD", "TEMP", "TONS", "LOADP1", "LOADP2", "Time24hr")])
+print("These are the four variables with the highest correlations coefficient. Unsurprisingly, the LOADP2 variable, number of derailed loaded passengar cars, has the highest correlation with casualty. This is another indicator that type derailment accidents are the most severe and warrant the closest scrutiny.")
+
+
+## Doing PCA to look for hidden quantitative relationships:
+# Perform PCA using the correlation matrix
+totacts_wCasualties.pca <- princomp(totacts_wCasualties_DR[,c("Casualty", "TRNSPD", "CARS", "Time24hr", "TEMP", "TONS", "MONTH")], cor = T)
+
+ggbiplot(totacts_wCasualties.pca, varname.size = 5, labels=row(totacts_wCasualties_DR)[,1], main="Biplot")
+
+### Inspecting outliers:
+totacts_wCasualties_DR[191, ]
+
+
+### Removing outliers:
+
+df <- totacts_wCasualties_DR[-191,]
+
+totacts_wCasualties.pca <- princomp(df[,c("Casualty", "TRNSPD", "CARS", "Time24hr", "TEMP", "TONS", "MONTH")], cor = T)
+
+ggbiplot(totacts_wCasualties.pca, varname.size = 5, labels=NULL[,1], main="Biplot", alpha = 0.1)
+
+
+### Loadings on first 2 PCs
+barplot(totacts_wCasualties.pca$loadings[,1], main="PC1 Loadings")
+barplot(totacts_wCasualties.pca$loadings[,2], main='PC2 Loadings')
+barplot(totacts_wCasualties.pca$loadings[,3], main='PC3 Loadings')
+
+print("The loading on casualty is relatively insignificant until the 3rd PC where it moves with trainspeed, # of hazard cars, and 24 hour time of day.")
+
+
+## Interaction plots
+### Decided to work with the dataframe with the most extreme accident removed
+totacts_wCasualties_DR_ER <- df
 
 
 
+### Define qualitative variables
+  #### Create Day/Not Day as a variable
+day <- rep(0, nrow(totacts_wCasualties_DR_ER))
+day[which(totacts_wCasualties_DR_ER$VISIBLTY =='day')] <- 1
+day <- as.factor(day)
+contrasts(day)
 
+  #### Clear/not clear as variable
+clear <- rep(0, nrow(totacts_wCasualties_DR_ER))
+clear[which(totacts_wCasualties_DR_ER$WEATHER =='clear')] <- 1
+clear <- as.factor(clear)
+contrasts(clear)
 
-### Zooming in on highway-rail type accidents: Interaction Plots between quantitative and qualitative variables.
-
-```{r}
-
-library(MASS)
-library(lindia)
-library(ggplot2)
-
-# Create Night/Not Night as a variable
-dark <- rep(0, nrow(totacts_wCasualties_DR))
-dark[which(totacts_wCasualties_DR$VISIBLTY =='dark')] <- 1
-dark <- as.factor(dark)
-contrasts(dark)
-
-# Raining/not raining as variable
-rain <- rep(0, nrow(totacts_wCasualties_DR))
-rain[which(totacts_wCasualties_DR$WEATHER =='rain')] <- 1
-rain <- as.factor(rain)
-contrasts(rain)
-
-# Snowing/not snowing as variable
-snow <- rep(0, nrow(totacts_wCasualties_DR))
-snow[which(totacts_wCasualties_DR$WEATHER =='snow')] <- 1
-snow <- as.factor(snow)
-contrasts(snow)
-
-# Create highway-rail variable
-HwyRail <- rep(0, nrow(totacts_wCasualties_DR))
-HwyRail[which(totacts_wCasualties_DR$TYPE == 'Hwy-Rail')] <- 1 
+  #### Create highway-rail variable
+HwyRail <- rep(0, nrow(totacts_wCasualties_DR_ER))
+HwyRail[which(totacts_wCasualties_DR_ER$TYPE == 'Hwy-Rail')] <- 1 
 HwyRail <- as.factor(HwyRail)
 contrasts(HwyRail)
 
-#Create TRNSPD variable
-TrnSpd_box <- ggplot(totacts_wCasualties_DR, aes(y=TRNSPD)) + geom_boxplot()
-
-med <- ggplot_build(TrnSpd_box)$data[[1]]$middle
-
-TRNSPD.factor <- totacts_wCasualties_DR$TRNSPD
-TRNSPD.factor[which(totacts_wCasualties_DR$TRNSPD<med)]<-'low train speed'
-TRNSPD.factor[which(totacts_wCasualties_DR$TRNSPD>=med)]<-'high train speed'
-TRNSPD.factor <- factor(TRNSPD.factor)
-contrasts(TRNSPD.factor)
-
-# Create derailment variable
-Derail <- rep(0, nrow(totacts_wCasualties_DR))
-Derail[which(totacts_wCasualties_DR$TYPE == 'Derailment')] <- 1 
+  #### Create derailment variable
+Derail <- rep(0, nrow(totacts_wCasualties_DR_ER))
+Derail[which(totacts_wCasualties_DR_ER$TYPE == 'Derailment')] <- 1 
 Derail <- as.factor(Derail)
 contrasts(Derail)
 
-# Interaction of highway rail and dark
-interaction.plot(HwyRail, dark, totacts_wCasualties_DR$Casualty)
+  #### Create passenger or commuter variable
+Pass_or_Comm <- rep(0, nrow(totacts_wCasualties_DR_ER))
+Pass_or_Comm[which(totacts_wCasualties_DR_ER$TYPEQ == 'Passenger' | totacts_wCasualties_DR_ER$TYPEQ == 'Commuter' )] <- 1 
+Pass_or_Comm <- as.factor(Pass_or_Comm)
+contrasts(Pass_or_Comm)
 
-# Interaction of highway rail and rain
-interaction.plot(HwyRail, rain, totacts_wCasualties_DR$Casualty)
+  #### Cause - Train roadbed and structures
+clear <- rep(0, nrow(totacts_wCasualties_DR_ER))
+clear[which(totacts_wCasualties_DR_ER$WEATHER =='clear')] <- 1
+clear <- as.factor(clear)
+contrasts(clear)
 
-# Interaction of highway rail and snow
-interaction.plot(HwyRail, snow, totacts_wCasualties_DR$Casualty)
+
+### Quantitative Variables
+
+  #### Create TRNSPD variable
+TrnSpd_box <- ggplot(totacts_wCasualties_DR_ER, aes(y=TRNSPD)) + geom_boxplot()
+
+med <- ggplot_build(TrnSpd_box)$data[[1]]$middle
+
+TRNSPD.factor <- totacts_wCasualties_DR_ER$TRNSPD
+TRNSPD.factor[which(totacts_wCasualties_DR_ER$TRNSPD<med)]<-'low train speed'
+TRNSPD.factor[which(totacts_wCasualties_DR_ER$TRNSPD>=med)]<-'high train speed'
+TRNSPD.factor <- factor(TRNSPD.factor)
+contrasts(TRNSPD.factor)
+
+  #### Create CARS variable
+CARS.factor <- totacts_wCasualties_DR_ER$CARS
+CARS.factor[which(totacts_wCasualties_DR_ER$CARS == 0)]<-'No Hazard Cars'
+CARS.factor[which(totacts_wCasualties_DR_ER$CARS > 0)]<-'1 or More Hazard Cars'
+CARS.factor <- factor(CARS.factor)
+contrasts(CARS.factor)
+
+  #### Create TONS variable
+Tons_box <- ggplot(totacts_wCasualties_DR_ER, aes(y=TONS)) + geom_boxplot()
+
+med <- ggplot_build(Tons_box)$data[[1]]$middle
+
+TONS.factor <- totacts_wCasualties_DR_ER$TONS
+TONS.factor[which(totacts_wCasualties_DR_ER$TONS<med)]<-'Low tonnage'
+TONS.factor[which(totacts_wCasualties_DR_ER$TONS>=med)]<-'high tonnage'
+TONS.factor <- factor(TONS.factor)
+contrasts(TONS.factor)
+
+### Plot
+  #### Variables of interest: day, clear, HwyRail, Derail, Pass_or_Comm, TRNSPD.factor, CARS.factor, TONS.factor
+
+  #### Highway Rail Plots
+  # Interaction of highway rail and day
+interaction.plot(HwyRail, day, totacts_wCasualties_DR_ER$Casualty)
+
+  # Interaction of highway rail and clear
+interaction.plot(HwyRail, clear, totacts_wCasualties_DR_ER$Casualty)
+
+  # Interaction of highway rail and Pass_or_Comm
+interaction.plot(HwyRail, Pass_or_Comm, totacts_wCasualties_DR_ER$Casualty)
+
+  # Interaction of highway rail and TRNSPD.factor
+interaction.plot(HwyRail, TRNSPD.factor, totacts_wCasualties_DR_ER$Casualty)
+
+  # Interaction of highway rail and CARS.factor
+interaction.plot(HwyRail, CARS.factor, totacts_wCasualties_DR_ER$Casualty)
+
+  # Interaction of highway rail and TONS.factor
+interaction.plot(HwyRail, TONS.factor, totacts_wCasualties_DR_ER$Casualty)
 
 
-# Interaction of highway rail and trainspeed
-interaction.plot(HwyRail, TRNSPD.factor, totacts_wCasualties_DR$Casualty)
+
+#### Derailment Plots
+  # Interaction of highway rail and day
+interaction.plot(Derail, day, totacts_wCasualties_DR_ER$Casualty)
+
+  # Interaction of highway rail and clear
+interaction.plot(Derail, clear, totacts_wCasualties_DR_ER$Casualty)
+
+  # Interaction of highway rail and Pass_or_Comm
+interaction.plot(Derail, Pass_or_Comm, totacts_wCasualties_DR_ER$Casualty)
+
+  # Interaction of highway rail and TRNSPD.factor
+interaction.plot(Derail, TRNSPD.factor, totacts_wCasualties_DR_ER$Casualty)
+
+  # Interaction of highway rail and CARS.factor
+interaction.plot(Derail, CARS.factor, totacts_wCasualties_DR_ER$Casualty)
+
+  # Interaction of highway rail and TONS.factor
+interaction.plot(Derail, TONS.factor, totacts_wCasualties_DR_ER$Casualty)
+
+
+#### Passenger or Commuter
+  # Interaction of Passenger or Commuter and day
+interaction.plot(Pass_or_Comm, day, totacts_wCasualties_DR_ER$Casualty)
+
+  # Interaction of Passenger or Commuter and clear
+interaction.plot(Pass_or_Comm, clear, totacts_wCasualties_DR_ER$Casualty)
+
+  # Interaction of Passenger or Commuter and TRNSPD.factor
+interaction.plot(Pass_or_Comm, TRNSPD.factor, totacts_wCasualties_DR_ER$Casualty)
+
+  # Interaction of Passenger or Commuter and CARS.factor
+interaction.plot(Pass_or_Comm, CARS.factor, totacts_wCasualties_DR_ER$Casualty)
+
+  # Interaction of Passenger or Commuter and TONS.factor
+interaction.plot(Pass_or_Comm, TONS.factor, totacts_wCasualties_DR_ER$Casualty)
+
+print("Looking at highway-rail interactions, it seems like non-highway rail accidents are worse on average which makes sense given the previous observation that derailment accidents in particular are worse per accident on average.")
+
+print("Looking at derailment interactions, low tonnage accidents are worse on average which is probably because passengar cars weigh less than non-passenger cars on average. This interaction doesn't tell us much but we may still choose to model it. The involvement of one or more hazard cars increases average casualties so this might be good to include. High train speed clearly has a strong interaction with derailment type accidents. Passenger or commuter train involvement increase severity. Most severe accidents happen during clear weather. Finally, daytime accidents are more severe on average.")
+
+print("Looking at passenger or commuter train type accidents, lower tonnage is associated with more severe accident damage. When hazard cars are present, accident severity seems to increase. There is an interaction between passenger or commuter and train speed. Accident severity seems to increase with bad weather.")
+
+
+###### Most important plots pasted for convenience:
+  # 3rd PC Loadings
+barplot(totacts_wCasualties.pca$loadings[,3], main='PC3 Loadings')
+
+  # Interaction of highway rail and TONS.factor
+interaction.plot(Derail, TONS.factor, totacts_wCasualties_DR_ER$Casualty)
+
+  # Interaction of highway rail and CARS.factor
+interaction.plot(Derail, CARS.factor, totacts_wCasualties_DR_ER$Casualty)
+
+  # Interaction of highway rail and TRNSPD.factor
+interaction.plot(Derail, TRNSPD.factor, totacts_wCasualties_DR_ER$Casualty)
+
+  # Interaction of highway rail and Pass_or_Comm
+interaction.plot(Derail, Pass_or_Comm, totacts_wCasualties_DR_ER$Casualty)
+
+ggarrange(plt_1, plt_2, plt_3, plt_4, plt_5, plt_6, nrow = 2, ncol = 3)
+ggarrange(plt_7, plt_8, plt_9, plt_10, plt_11, plt_12, nrow = 2, ncol = 3)
 
 ```
 
+# Hypothesis formation:
+Hypothesis 1:
+$H_0:$ There is no relationship or an inverse relationship between derailment type accidents with passenger or commuter cars and accident severity relative to other types of accidents with other types of cars.
+$H_1:$ There is a positive relationship between derailment type accidents with passenger or commuter cars and accident severity relative to other types of accidents with other types of cars.
 
-## Looking at extreme accidents
+Hypothesis 2:
+$H_0:$ There is no interaction between derailment type accidents involving passenger or commuter cars and the number of hazard cars involved and train speed affecting accident severity.
+$H_1:$ There is an interaction between derailment type accidents involving passenger or commuter cars and the number of hazard cars involved and train speed affecting accident severity.
 
-```{r}
-dmgbox <- ggplot(totacts_DR, aes(y=ACCDMG)) + geom_boxplot()
-dmgbox
-
-# Names associated with box plot features:
-names(ggplot_build(dmgbox)$data[[1]])
-
-# ymax is the upper whisker - anything above that is an outlier
-upper <- ggplot_build(dmgbox)$data[[1]]$ymax
-
-# create a new data frame with only the outliers
-xdmg <- totacts_DR[totacts_DR$ACCDMG > upper,]
-
-# how many outliers are there
-nrow(xdmg)
-
-xdmg <- xdmg[-186, ]
-
-# What proportion of accidents are extreme?
-
-frac_acts_x <- round(nrow(xdmg)/nrow(totacts), 2)*100
-
-# Proportion of costs
-
-frac_cost_x <- round(sum(as.numeric(totacts$ACCDMG[which(totacts$ACCDMG > ggplot_build(dmgbox)$data[[1]]$ymax)]))/sum(as.numeric(totacts$ACCDMG)), 2)*100
-
-# Remove 9/11 accident
-
-
-
-```
-
-There are `r nrow(xdmg)` outliers which comprise `r frac_cost_x`% of the sum of accident damage across all accidents. `r frac_acts_x`% of all accidents are extreme accidents.
-
-### Make a barplot of the cause of accidents for extreme accidents.
-
-```{r}
-# Use table() to see the frequencies
-
-tbl <- as.data.frame(table(xdmg$Cause))
-
-# Use barplot() to graph this
-
-ggplot(tbl, aes(x = Var1, y= Freq)) + geom_bar(stat="identity")
-
-tbl
-```
-
-### Make a barplot of the cause of accidents for extreme accidents.
-
-```{r}
-# Use table() to see the frequencies
-
-tbl <- as.data.frame(table(xdmg$TYPE))
-
-# Use barplot() to graph this
-
-ggplot(tbl, aes(x = Var1, y= Freq)) + geom_bar(stat="identity")
-
-tbl
-```
-
-### Box plot of extreme accidents by accident type
-
-# ACCDMG Analysis:
-
-# Casualties Analysis:
