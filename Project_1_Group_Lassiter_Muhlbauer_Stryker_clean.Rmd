@@ -1,0 +1,739 @@
+---
+title: "Project 1 Individual Work"
+author: "Tom Muhlbauer"
+date: "10/12/2020"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+
+#
+# This is setting up the environment and loading the data for the train accidents
+#
+# I've also set up a few new variables for the data frame including Weather and Vis
+#
+
+knitr::opts_chunk$set(echo = TRUE)
+
+#Import libraries
+library(devtools) # for ggbiplot
+library(ggplot2)
+library(lattice)
+library(ggbiplot)
+library(GGally)
+library(ggpubr)
+library(knitr)
+library(lindia)
+library(MASS)
+
+traindir <- "C:/Users/tcmuh/Desktop/Fall2020/SYS6021/Data/TrainData"
+sourcedir <-"C:/Users/tcmuh/Desktop/Fall2020/SYS6021/Source"
+
+# Source AccidentInput
+source("AccidentInput.R")
+
+# you should have two data structures in working memory
+# First - a list of data frames for each year of accident data
+acts <- file.inputl(traindir)
+
+# Next a data frame with all accidents from all years from 2001 - 2018
+# with columns that are consistent for all of these years
+
+# Get a common set the variables
+
+comvar <- intersect(colnames(acts[[1]]), colnames(acts[[8]]))
+
+# the combined data frame
+totacts <- combine.data(acts, comvar)
+totacts$TYPE <- factor(totacts$TYPE, labels = c("Derailment", "HeadOn", "Rearend", "Side", "Raking", "BrokenTrain", "Hwy-Rail", "GradeX", "Obstruction", "Explosive", "Fire","Other","SeeNarrative" ))
+
+totacts$TYPEQ <- as.numeric(totacts$TYPEQ)
+
+# Now convert to factor- use actual categories from data dictionary to be more informative
+
+totacts$TYPEQ <- factor(totacts$TYPEQ, labels = c("Freight", "Passenger", "Commuter", "Work",  "Single", "CutofCars", "Yard", "Light", "Maint"))
+
+# Create a new variable called Cause that uses labels for cause.
+# Add it to totacts.
+
+totacts$Cause <- rep(NA, nrow(totacts))
+
+totacts$Cause[which(substr(totacts$CAUSE, 1, 1) == "M")] <- "M"
+totacts$Cause[which(substr(totacts$CAUSE, 1, 1) == "T")] <- "T"
+totacts$Cause[which(substr(totacts$CAUSE, 1, 1) == "S")] <- "S"
+totacts$Cause[which(substr(totacts$CAUSE, 1, 1) == "H")] <- "H"
+totacts$Cause[which(substr(totacts$CAUSE, 1, 1) == "E")] <- "E"
+
+# This new variable, Cause, has to be a factor
+totacts$Cause <- factor(totacts$Cause)
+
+# Create a new variable called Weather that uses labels for Weather.
+# Add it to totacts.
+
+totacts$Weather <- rep(NA, nrow(totacts))
+
+totacts$Weather[which(totacts$WEATHER == "1")] <- "clear"
+totacts$Weather[which(totacts$WEATHER == "2")] <- "cloudy"
+totacts$Weather[which(totacts$WEATHER == "3")] <- "rain"
+totacts$Weather[which(totacts$WEATHER == "4")] <- "fog"
+totacts$Weather[which(totacts$WEATHER == "5")] <- "sleet"
+totacts$Weather[which(totacts$WEATHER == "6")] <- "snow"
+
+# This new variable, Weather, has to be a factor
+totacts$Weather <- factor(totacts$Weather)
+
+# Create a new variable called Vis that uses labels for VISIBLTY.
+# Add it to totacts.
+
+totacts$Vis <- rep(NA, nrow(totacts))
+
+totacts$Vis[which(totacts$VISIBLTY == "1")] <- "dawn"
+totacts$Vis[which(totacts$VISIBLTY == "2")] <- "day"
+totacts$Vis[which(totacts$VISIBLTY == "3")] <- "dusk"
+totacts$Vis[which(totacts$VISIBLTY == "4")] <- "dark"
+
+# This new variable, Vis, has to be a factor
+totacts$Vis <- factor(totacts$Vis)
+
+# Now we find and remove duplicates to create just extreme accident dataframe
+dmgbox <- dmgbox <-boxplot(totacts$ACCDMG)
+  
+ggplot(as.data.frame(totacts$ACCDMG), aes(x=totacts$ACCDMG)) + 
+geom_boxplot(col= "steelblue") + theme(plot.title = element_text(hjust = 0.5)) + coord_flip()
+
+xdmg <- totacts[totacts$ACCDMG > dmgbox$stats[5],]
+
+ggplot(as.data.frame(xdmg$ACCDMG), aes(x=xdmg$ACCDMG)) + 
+geom_boxplot(col= "steelblue") + theme(plot.title = element_text(hjust = 0.5)) + coord_flip()
+
+# Remove duplicates and call the new dataframe xdmgnd
+xdmgnd <- xdmg[!(duplicated(xdmg[, c("INCDTNO", "YEAR", "MONTH", "DAY", "TIMEHR", "TIMEMIN")])),]
+
+# Remove 9/11
+xdmgnd <- xdmgnd[-186,]
+
+```
+
+Quantitative variables:
+TRNSPD, TEMP, CARS, LOADF1, LOADP1, LOADF2, LOADP2, EMPTYF1, EMPTYP1, TONS
+(others not as useful TRKDMG, EQPDMG)
+
+Qualitative variables:
+CAUSE/Cause, TYPE, TYPEQ, WEATHER/Weather, VISIBLTY/Vis, TRKCLAS/SpeedLimit/OverLimit
+(others not as useful STATION)
+
+Response:
+ACCDMG
+
+We want to start looking at qualitative variables that have either a lot of extreme accidents
+or cause a lot of damage. Before determining a hypothesis, we need to visualize the data with
+a series of boxplots and barplots.
+
+```{r}
+
+ggbarplot(as.data.frame(xdmgnd), x="TRKCLAS", y="ACCDMG", merge = T)
+
+gghistogram(as.data.frame(xdmgnd), x="TRKCLAS", stat="count", title = "Histogram of Extreme Accidents")
+
+ggboxplot(as.data.frame(xdmgnd), x="TRKCLAS", y="ACCDMG")
+
+```
+
+
+Data found online (http://www.trolleyjolly.com/webstart/library/table_fra_track.htm)
+Track Classification    Freight   Passenger	    Section
+Excepted Track	        10 mph	  Not Allowed   49 CFR § 213.4
+Class 1 Track	          10 mph    15 mph	      49 CFR § 213.9
+Class 2 Track	          25 mph    30 mph        49 CFR § 213.9
+Class 3 Track	          40 mph    60 mph        49 CFR § 213.9
+Class 4 Track	          60 mph    80 mph        49 CFR § 213.9
+Class 5 Track	          80 mph    90 mph        49 CFR § 213.9
+Class 6 Track	          110 mph   110 mph       49 CFR § 213.307
+Class 7 Track	          125 mph   125 mph       49 CFR § 213.307
+Class 8 Track	          160 mph   160 mph       49 CFR § 213.307
+Class 9 Track	          200 mph   200 mph       49 CFR § 213.307
+
+I'm going to try to create a new quantitative variable called SpeedLimit that 
+uses the above data for freight trains and passenger trains. I will also create 
+a categorical variable called OverLimit if the train is exceeding the posted
+speed limit for the type of train and track class of the track.
+
+There is a TYPEQ for Freight and I think for Passenger (and I added Commuter as well).
+
+Here is the hypothesis I want to test:
+H0: Train speed over the posted speed limit for the type of train and track class
+of the track does not increase extreme accident damage.
+HA: Train speed over the posted speed limit increases extreme accident damage.
+
+```{r}
+
+gghistogram(as.data.frame(xdmgnd), x="TYPEQ", stat="count")
+
+# Create variable called SpeedLimit from TYPEQ and TRKCLAS
+
+xdmgnd$SpeedLimit <- rep(0, nrow(xdmgnd))
+
+xdmgnd$SpeedLimit[which(xdmgnd$TRKCLAS == "1" | xdmgnd$TRKCLAS == "X")] <- 10
+xdmgnd$SpeedLimit[which(xdmgnd$TRKCLAS == "2")] <- 25
+xdmgnd$SpeedLimit[which(xdmgnd$TRKCLAS == "3")] <- 40
+xdmgnd$SpeedLimit[which(xdmgnd$TRKCLAS == "4")] <- 60
+xdmgnd$SpeedLimit[which(xdmgnd$TRKCLAS == "5")] <- 80
+xdmgnd$SpeedLimit[which(xdmgnd$TRKCLAS == "1" & (xdmgnd$TYPEQ == "Passenger" | xdmgnd$TYPEQ == "Commuter"))] <- 15
+xdmgnd$SpeedLimit[which(xdmgnd$TRKCLAS == "2" & (xdmgnd$TYPEQ == "Passenger" | xdmgnd$TYPEQ == "Commuter"))] <- 30
+xdmgnd$SpeedLimit[which(xdmgnd$TRKCLAS == "3" & (xdmgnd$TYPEQ == "Passenger" | xdmgnd$TYPEQ == "Commuter"))] <- 60
+xdmgnd$SpeedLimit[which(xdmgnd$TRKCLAS == "4" & (xdmgnd$TYPEQ == "Passenger" | xdmgnd$TYPEQ == "Commuter"))] <- 80
+xdmgnd$SpeedLimit[which(xdmgnd$TRKCLAS == "5" & (xdmgnd$TYPEQ == "Passenger" | xdmgnd$TYPEQ == "Commuter"))] <- 90
+xdmgnd$SpeedLimit[which(xdmgnd$TRKCLAS == "6")] <- 110
+xdmgnd$SpeedLimit[which(xdmgnd$TRKCLAS == "7")] <- 125
+xdmgnd$SpeedLimit[which(xdmgnd$TRKCLAS == "8")] <- 160
+xdmgnd$SpeedLimit[which(xdmgnd$TRKCLAS == "9")] <- 200
+
+ggscatter(as.data.frame(xdmgnd),x="SpeedLimit",y="TRNSPD")
+ggboxplot(as.data.frame(xdmgnd),x="SpeedLimit",y="ACCDMG")
+ggscatter(as.data.frame(xdmgnd),x="SpeedLimit",y="ACCDMG")
+
+```
+
+
+```{r}
+
+SpeedLimit.lm1 <- lm(ACCDMG~TRNSPD+SpeedLimit, data=xdmgnd)
+summary(SpeedLimit.lm1)
+
+plot(SpeedLimit.lm1,labels.id = NULL)
+
+gg_boxcox(SpeedLimit.lm1)
+
+SpeedLimit.lm2 <- lm(ACCDMG^-0.5/-0.5~TRNSPD+SpeedLimit, data=xdmgnd)
+summary(SpeedLimit.lm2)
+
+plot(SpeedLimit.lm2,labels.id = NULL)
+plot(SpeedLimit.lm2,labels.id = NULL, which=4) #Cook's distance
+
+```
+
+While SpeedLimit and TRNSPD look relevant, there is a distinct possibility that there is some colinearity
+going on and I still think there are too many listed at the "0" speed limit to make an assessment.  I was
+planning to look at exceeding the speed limit had an impact but with all the 0 items, I'm unsure what to do.
+
+Maybe if I only look at ones I know the speed limit on (10-220)?
+
+```{r}
+
+# Create variable called OverLimit from TRNSPD and SpeedLimit
+
+xdmgnd$OverLimit <- rep(0, nrow(xdmgnd))
+
+xdmgnd$OverLimit[which(xdmgnd$SpeedLimit != "0" & (xdmgnd$TRNSPD > xdmgnd$SpeedLimit))] <- 1
+
+# Does OverLimit contribute to ACCDMG?
+
+ggboxplot(as.data.frame(xdmgnd),x="OverLimit",y="ACCDMG")
+ggscatter(as.data.frame(xdmgnd),x="OverLimit",y="ACCDMG")
+
+# Inconclusive from charts but maybe in interaction with TRNSPD?
+
+OverLimit.lm1 = lm(ACCDMG~TRNSPD+OverLimit, data=xdmgnd)
+
+summary(OverLimit.lm1)
+
+OverLimit.lm2 = lm(ACCDMG^-0.5/-0.5~TRNSPD+OverLimit, data=xdmgnd)
+
+summary(OverLimit.lm2)
+
+```
+
+So, OverLimit was not relevant, maybe because of the 0 SpeedLimit data.
+
+Maybe if I remove the lines with 0 for SpeedLimit and try again.
+
+```{r}
+
+xdmgnd_sl <- xdmgnd[which(xdmgnd$SpeedLimit != 0),]
+
+OverLimit.lm3 = lm(ACCDMG^-0.5/-0.5~TRNSPD+SpeedLimit+OverLimit, data=xdmgnd_sl)
+
+summary(OverLimit.lm3)
+
+```
+
+Well, that may have worked. Maybe I'll add in some more of the quantitative terms
+like TONS, TEMP, and TotCars.
+
+```{r}
+
+xdmgnd_sl$TotCars <- rep(0, nrow(xdmgnd_sl))
+xdmgnd_sl$TotCars <- xdmgnd_sl$LOADF1+xdmgnd_sl$LOADP1+xdmgnd_sl$EMPTYF1+xdmgnd_sl$EMPTYP1
+
+Limit.main.lm1 <- lm(ACCDMG~TRNSPD+SpeedLimit+OverLimit+TEMP+TONS+TotCars, data = xdmgnd_sl)
+
+summary(Limit.main.lm1)
+
+```
+
+Going to remove TEMP from the model and then check for transforms
+
+```{r}
+
+Limit.main.lm2 <- lm(ACCDMG~TRNSPD+SpeedLimit+OverLimit+TONS+TotCars, data=xdmgnd_sl)
+
+summary(Limit.main.lm2)
+
+```
+
+Now the diagnostic plots
+
+```{r}
+
+plot(Limit.main.lm2,labels.id = NULL)
+
+gg_boxcox(Limit.main.lm2)
+
+```
+
+Transform with lambda = -0.5
+
+```{r}
+
+Limit.trans.lm1 <- lm(ACCDMG^-0.5/-0.5~TRNSPD+SpeedLimit+OverLimit+TONS+TotCars, data = xdmgnd_sl)
+
+summary(Limit.trans.lm1)
+
+```
+
+So in the transformed model TotCars is no longer a descriptive variable but I
+will look at some interaction plots and see there might be some interactions.
+
+```{r}
+
+TRNSPD.factor<-xdmgnd_sl$TRNSPD
+TRNSPD.factor[which(xdmgnd_sl$TRNSPD<50)]<-'low train speed'
+TRNSPD.factor[which(xdmgnd_sl$TRNSPD>=50)]<-'high train speed'
+TRNSPD.factor <- factor(TRNSPD.factor)
+
+interaction.plot(xdmgnd_sl$OverLimit, TRNSPD.factor, xdmgnd_sl$ACCDMG)
+
+TotCars.factor<-xdmgnd_sl$TotCars
+TotCars.factor[which(xdmgnd_sl$TotCars<150)]<-'short train'
+TotCars.factor[which(xdmgnd_sl$TotCars>=150)]<-'long train'
+TotCars.factor <- factor(TotCars.factor)
+
+interaction.plot(xdmgnd_sl$OverLimit, TotCars.factor, xdmgnd_sl$ACCDMG)
+
+TONS.factor<-xdmgnd_sl$TONS
+TONS.factor[which(xdmgnd_sl$TONS<15000)]<-'lighter train'
+TONS.factor[which(xdmgnd_sl$TONS>=15000)]<-'heavier train'
+TONS.factor <- factor(TONS.factor)
+
+interaction.plot(xdmgnd_sl$OverLimit, TONS.factor, xdmgnd_sl$ACCDMG)
+
+```
+
+The three variables (TRNSPD, TONS, and TotCars) look like there might be interactions
+with OverLimit so I'm going to try a full interactions model and see what comes out.
+
+```{r}
+
+Limit.inter.lm1 <- lm(ACCDMG^-0.5/-0.5~(TRNSPD+SpeedLimit+OverLimit+TONS+TotCars)^2,
+                    data=xdmgnd_sl)
+
+summary(Limit.inter.lm1)
+
+```
+Looks like there are a lot of terms that may not be valuable so I'm going to do
+an anova and stepwise and see what they say.
+
+```{r}
+
+anova(Limit.trans.lm1, Limit.inter.lm1)
+
+Limit.step.lm1 <- step(Limit.inter.lm1)
+
+summary(Limit.step.lm1)
+
+```
+
+The partial F-test from anova rejects the null hypothesis that the smaller model
+(main effects model) is no different than the larger model (full interaction
+model) so I will select the full interaction model to continue with.
+
+I need to check the stepwise model vs. the full interaction model as well to
+determine which is better. I'll look at the partial F-test and the AIC for the
+two models to go forward.
+
+Looks like I have a good model now but I should look at the diagnostic plots
+once more and see if there is anything to be concerned about.  I also should look
+at the AIC for the full interaction model and the stepwise model.
+
+```{r}
+
+AIC(Limit.inter.lm1)
+AIC(Limit.step.lm1)
+
+anova(Limit.step.lm1, Limit.inter.lm1)
+
+plot(Limit.step.lm1,labels.id = NULL)
+plot(Limit.step.lm1,labels.id = NULL, which=4) #Cook's distance
+
+```
+
+A little concern with the Residuals vs. Fitted plot as it looks like there is
+some sort of pattern there but I can't seem to find what variable might clean that
+up. The rest of the plots look acceptable to me.
+
+Also the AIC is very similar for both models although the anova fails to reject
+the null hypothesis on the partial F-test.  I think I'm going to stay with the
+stepwise (smaller) model variables and see how the model does on prediction.
+
+I'm going to create a test set with 1/3 of the data and train the models on the
+rest of the data to see how well they do in predicting ACCDMG on the test set.
+
+```{r}
+
+dt <- sort(sample(nrow(xdmgnd_sl),nrow(xdmgnd_sl)*1/3))
+test_set <- xdmgnd_sl[dt,]
+training_set <- xdmgnd_sl[-dt,]
+
+Limit.final.lm1 <- lm(ACCDMG^-0.5/-0.5~TRNSPD + SpeedLimit + OverLimit + 
+    TONS + TotCars + TRNSPD*SpeedLimit + TRNSPD*OverLimit + TRNSPD*TONS + 
+    TRNSPD*TotCars + SpeedLimit*OverLimit + SpeedLimit*TotCars + 
+    OverLimit*TotCars + TONS*TotCars, data = training_set)
+
+summary(Limit.final.lm1)
+AIC(Limit.final.lm1)
+
+Limit.final.lm2 <- lm(ACCDMG^-0.5/-0.5 ~ (TRNSPD + SpeedLimit + OverLimit + TONS + 
+    TotCars)^2, data=training_set)
+
+summary(Limit.final.lm2)
+AIC(Limit.final.lm2)
+
+source("TestSet.R")
+
+Limit.final.lm1.pred<-predict(Limit.final.lm1,newdata=test_set) 
+Limit.final.lm2.pred<-predict(Limit.final.lm2,newdata=test_set)
+
+##Next, compute PMSE:
+
+pmse.Limit.final.lm1<-mse(Limit.final.lm1.pred,test_set$ACCDMG^-0.5/-0.5)
+pmse.Limit.final.lm1
+
+pmse.Limit.final.lm2<-mse(Limit.final.lm2.pred,test_set$ACCDMG^-0.5/-0.5)
+pmse.Limit.final.lm2
+
+```
+
+I ran the train data/test data a number of times and it was inconclusive which was
+better so with that in mind, I would select the smaller, stepwise model as it is
+simpler.
+
+Now what would be actionable about this particular analysis? I have rejected the
+null hypothesis that that train speed over the posted speed limit has no effect
+and the analysis shows speeding increases extreme accident damage.
+
+Recommendation to TRA: Implement additional safety features in the trains to
+tell the engineers when they are exceeding the posted speed limit, ensure the
+engineers know the speed limits (training and signage), and work with Congress
+to change penalties for exceeding the speed limits (many companies now have
+no-tolerance policies for engineers who exceed the speed limit by 5mph or more).
+Other technology such as speed cameras or other sensors could be installed in
+more dangerous areas such as curves or high-traffic (trains and cars/trucks)
+areas. Companies could consider throttle governors or other technology in addition
+to their computer tracking system to help engineers maintain safe driving speeds.
+
+
+
+
+Next I'm going to look at Weather.
+
+```{r}
+
+summary(xdmgnd$Weather)
+barchart(xdmgnd$Weather,data = xdmgnd)
+ggbarplot(as.data.frame(xdmgnd), x="Weather", y="ACCDMG", merge = "T")
+ggboxplot(as.data.frame(xdmgnd), x="Weather", y="ACCDMG")
+
+Weather.lm1 <- lm(ACCDMG~TRNSPD+Weather, data=xdmgnd)
+
+summary(Weather.lm1)
+
+```
+
+So, it looks like rain has an impact on ACCDMG while the others do not.  I am going to create
+a new variable called NotClear though and assign it to "1" for all Weather not clear and see
+if it is relevant or not toward ACCDMG. Note: TRNSPD is very much important as well here.
+
+```{r}
+
+xdmgnd$NotClear <- rep(1,nrow(xdmgnd))
+xdmgnd$NotClear[which(xdmgnd$Weather == "clear")] <- 0
+
+Weather.lm2 <- lm(ACCDMG~TRNSPD+NotClear, data=xdmgnd)
+summary(Weather.lm2)
+
+```
+
+What is interesting is that Weather=rain is more closely related to ACCDMG.
+
+https://batchgeo.com/map/us-cities-rainy-days-per-year
+
+The above shows the rainy days in different areas of the country.  It looks like between 90
+and 120 days of precipitation (maybe combine rain, sleet, and snow?) on average across the
+entire country.
+
+I'm going to create a variable called Precip for days of rain, sleet, and/or snow.
+
+```{r}
+
+xdmgnd$Precip <- rep(0,nrow(xdmgnd))
+xdmgnd$Precip[which(xdmgnd$Weather == "rain" | xdmgnd$Weather == "sleet" | 
+  xdmgnd$Weather == "snow")] <- 1
+
+ggboxplot(as.data.frame(xdmgnd),x="Precip", y="ACCDMG")
+
+Weather.lm3 <- lm(ACCDMG~TRNSPD+Precip, data=xdmgnd)
+summary(Weather.lm3)
+
+```
+
+Based on the simple analysis thus far, I believe precipitation is descriptive in predicting
+extreme train accident damage.  I will now do more in-depth analysis to test the following
+hypothesis:
+
+H0 = Precipitation (rain, sleet, and/or snow) does not increase extreme train accident damage.
+HA = Precipitation causes an increase in extreme train accident damage.
+
+We have looked at TRNSPD already but other quantitative variables may also be descriptive.
+First I want to look at TEMP, TONS, and train length (create new variable) in addition
+to Precip and TRNSPD.
+
+```{r}
+
+xdmgnd$TotCars <- rep(0, nrow(xdmgnd))
+xdmgnd$TotCars <- xdmgnd$LOADF1+xdmgnd$LOADP1+xdmgnd$EMPTYF1+xdmgnd$EMPTYP1
+
+source("SPM_Panel.R")
+
+uva.pairs(xdmgnd[,c("ACCDMG", "TRNSPD", "TONS", "TEMP", "Precip", "TotCars")])
+
+```
+
+As expected, TotCars is correlated with TONS but I think I'm going to build a linear
+model and see if any of the variables should be dropped from the model and then also
+check and see if a transformation is needed or maybe some of the observations should
+be removed (influencial points).
+
+```{r}
+
+xdmg.main.lm1 <- lm(ACCDMG~TRNSPD+TONS+TEMP+Precip+TotCars, data=xdmgnd)
+summary(xdmg.main.lm1)
+
+plot(xdmg.main.lm1,labels.id = NULL)
+
+```
+
+From the coefficients, it looks like all of the factors selected except TEMP are relevant.
+
+From the plots, it looks like we should consider a transform of the response (Q-Q plot).
+It is hard to tell if there is a problem on the residual vs. fitted but we'll check again
+after a transform. Next step is to do a boxcox plot of the model.
+
+```{r}
+
+gg_boxcox(xdmg.main.lm1)
+
+```
+
+From the boxcox, the optial lambda is -0.5 so I'll rebuild the model using a lambda
+transform.
+
+```{r}
+
+xdmg.main.lm2 <- lm(ACCDMG^-0.5/-0.5~TRNSPD+TONS+TotCars+TEMP+Precip, data=xdmgnd)
+summary(xdmg.main.lm2)
+
+plot(xdmg.main.lm2,labels.id = NULL)
+
+plot(xdmg.main.lm2,labels.id = NULL, which = 4)
+
+```
+
+It looks like now TEMP and TotCars may not be helping the model. I also need to check
+and see if interaction terms might be needed (without just trying a full 2nd order
+lm).
+
+```{r}
+
+# Interaction Plot
+trnspdbox<-boxplot(xdmgnd$TRNSPD)
+TRNSPD.factor<-xdmgnd$TRNSPD
+TRNSPD.factor[which(xdmgnd$TRNSPD<50)]<-'low train speed'
+TRNSPD.factor[which(xdmgnd$TRNSPD>=50)]<-'high train speed'
+TRNSPD.factor <- factor(TRNSPD.factor)
+
+interaction.plot(xdmgnd$Precip, TRNSPD.factor, xdmgnd$ACCDMG)
+
+tonsbox<-boxplot(xdmgnd$TONS)
+TONS.factor<-xdmgnd$TONS
+TONS.factor[which(xdmgnd$TONS<15000)]<-'lighter train'
+TONS.factor[which(xdmgnd$TONS>=15000)]<-'heavier train'
+TONS.factor <- factor(TONS.factor)
+
+interaction.plot(xdmgnd$Precip, TONS.factor, xdmgnd$ACCDMG)
+
+carsbox<-boxplot(xdmgnd$TotCars)
+TotCars.factor<-xdmgnd$TotCars
+TotCars.factor[which(xdmgnd$TotCars<150)]<-'short train'
+TotCars.factor[which(xdmgnd$TotCars>=150)]<-'long train'
+TotCars.factor <- factor(TotCars.factor)
+
+interaction.plot(xdmgnd$Precip, TotCars.factor, xdmgnd$ACCDMG)
+
+```
+
+Looks like high speed and Precip may have an interaction since the line in the
+interaction plot are not parallel. The slopes between TONS and Precip are
+also completely different so maybe an interaction there as well.  There is possibly
+an interaction between Precip and TotCars, too so I'll add those terms into the
+model.  Actually, I'm going to look at a complete 2nd order model now and see if
+those coefficients show up as relevant.  I'll start with the untransformed ACCDMG
+and see if the plots indicate a need for a transform (I suspect they will).
+
+```{r}
+
+xdmg.inter.lm1 <- lm(ACCDMG~(TRNSPD+TONS+TEMP+TotCars+Precip)^2, data=xdmgnd)
+summary(xdmg.inter.lm1)
+
+plot(xdmg.inter.lm1,labels.id = NULL)
+plot(xdmg.inter.lm1,labels.id = NULL, which = 4)
+
+```
+
+As I thought, I need to look at the boxcox plot and see what transform is needed.
+
+```{r}
+
+gg_boxcox(xdmg.inter.lm1)
+
+```
+
+Transform the model with Lambda = -0.5
+
+```{r}
+
+xdmg.inter.lm2 <- lm(ACCDMG^-0.5/-0.5~(TRNSPD+TONS+TEMP+TotCars+Precip)^2, data=xdmgnd)
+summary(xdmg.inter.lm2)
+
+plot(xdmg.inter.lm2,labels.id = NULL)
+plot(xdmg.inter.lm2,labels.id = NULL, which = 4)
+
+```
+
+The plots look okay but I'm a little unsure about the residuals vs. fitted as it
+appears as if there might be a descriptive variable missing as the residuals
+look like there is a consistent pattern. Q-Q plot looks good. Not sure how to
+read the residuals vs. leverage other than to look and see if there are a few 
+influential points.  The Cook's distance plot shows that none of the potentially
+influential points are influencing the regression too much.
+
+I think I want to do a stepwise look at the interaction model as there are some
+variables and interactions that done seem needed (TEMP mainly).
+
+```{r}
+
+xdmg.inter.step <- step(xdmg.inter.lm2)
+
+summary(xdmg.inter.step)
+
+```
+
+Two things I notice from the summary of the stepwise function: 1) TEMP does not
+appear to be descriptive and should be removed and 2) Precip does appear to have
+an effect on ACCDMG.  I going to rebuild the full model and step model without
+TEMP and see where that leads us.
+
+```{r}
+
+xdmg.inter.lm3 <- lm(ACCDMG^-0.5/-0.5~(TRNSPD+TONS+TotCars+Precip)^2, data=xdmgnd)
+
+summary(xdmg.inter.lm3)
+
+xdmg.step.lm3 <- step(xdmg.inter.lm3)
+
+summary(xdmg.step.lm3)
+
+anova(xdmg.inter.lm3, xdmg.step.lm3)
+
+```
+
+This time we fail to reject the partial F-test so we select the smaller model,
+the stepwise model. I want to see the effect of Precip on ACCDMG so here are
+some calculations:
+
+```{r}
+x1 <- median(xdmgnd$TRNSPD)
+x2 <- median(xdmgnd$TONS)
+x3 <- median(xdmgnd$TotCars)
+x4 <- 0 #No precipitation
+
+B0 <- xdmg.step.lm3$coefficients[1]
+B1 <- xdmg.step.lm3$coefficients[2]
+B2 <- xdmg.step.lm3$coefficients[3]
+B3 <- xdmg.step.lm3$coefficients[4]
+B4 <- xdmg.step.lm3$coefficients[5]
+B5 <- xdmg.step.lm3$coefficients[6]
+B6 <- xdmg.step.lm3$coefficients[7]
+B7 <- xdmg.step.lm3$coefficients[8]
+B8 <- xdmg.step.lm3$coefficients[9]
+B9 <- xdmg.step.lm3$coefficients[10]
+
+# Now add one Std Dev of each variable to the median
+
+test1 <- B0+B1*x1+B2*x2+B3*x3+B4*x4+B5*x1*x2+B6*x1*x3+B7*x2*x3+B8*x2*x4+B9*x3*x4
+accdmg_med1 <- (-0.5*test1)^-2
+
+x4 <- 1 #precipitation
+
+test2 <- B0+B1*x1+B2*x2+B3*x3+B4*x4+B5*x1*x2+B6*x1*x3+B7*x2*x3+B8*x2*x4+B9*x3*x4
+accdmg_med2 <- (-0.5*test2)^-2
+
+accdmg_med2
+accdmg_med1
+accdmg_med2-accdmg_med1
+
+x1 <- median(xdmgnd$TRNSPD)+sd(xdmgnd$TRNSPD)
+x2 <- median(xdmgnd$TONS)+sd(xdmgnd$TONS)
+x3 <- median(xdmgnd$TotCars)+sd(xdmgnd$TotCars)
+x4 <- 0 #No precipitation
+
+test3 <- B0+B1*x1+B2*x2+B3*x3+B4*x4+B5*x1*x2+B6*x1*x3+B7*x2*x3+B8*x2*x4+B9*x3*x4
+accdmg_medsd1 <- (-0.5*test3)^-2
+
+x4 <- 1 #precipitation
+
+test4 <- B0+B1*x1+B2*x2+B3*x3+B4*x4+B5*x1*x2+B6*x1*x3+B7*x2*x3+B8*x2*x4+B9*x3*x4
+accdmg_medsd2 <- (-0.5*test4)^-2
+
+accdmg_medsd2
+accdmg_medsd1
+accdmg_medsd2-accdmg_medsd1
+
+
+
+```
+Using the medians for TRNSPD, TONS, and TotCars, precipitation leads to an increase 
+in accident damage of $37599.72.  Because of the interactions, higher speeds,
+higher tonnage, and longer trains lead to even higher estimated accident damage
+when precipitation is present. Based on calculations with representative sample
+data, precipitation adds as much accident damage as adding 15 mph to the train's
+speed.
+
+```{r}
+
+ggbarplot(as.data.frame(xdmgnd[which(xdmgnd$Precip == 1),]), x="TYPE", y="ACCDMG")
+ggbarplot(as.data.frame(xdmgnd[which(xdmgnd$Precip == 0),]), x="TYPE", y="ACCDMG")
+
+```
+
+
+
