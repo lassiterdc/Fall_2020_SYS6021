@@ -1,0 +1,457 @@
+---
+title: "Project1"
+author: "Daniel Lassiter, Tom Muhlbaur, and Rachael Stryker"
+date: "10/23/2020"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r, echo = FALSE, include=FALSE}
+#Import libraries
+library(tidyverse)
+library(tibble)
+library(dplyr)
+library(ggplot2)
+library(ggfortify)
+library(lattice)
+library(GGally)
+library(MASS)
+library(lindia)
+library(ggpubr)
+# install.packages("devtools")
+library(devtools)
+# install_github("vqv/ggbiplot")
+library(ggbiplot)
+library(data.table)
+library(gplots)
+library(boot)
+source("http://www.phaget4.org/R/myImagePlot.R")
+# install.packages('forecast', dependencies = TRUE)
+library(forecast)
+
+#Set directories:
+sourcedir <- "C:/Users/Daniel/Dropbox/Self organization/Education/UVA/Graduate School/Coursework/Fall_2020/SYS 6021 Linear Statistical Models/Source"
+traindir <- "C:/Users/Daniel/Dropbox/Self organization/Education/UVA/Graduate School/Coursework/Fall_2020/SYS 6021 Linear Statistical Models/Data/TrainData"
+
+
+# Source AccidentInput
+setwd(sourcedir)
+source("AccidentInput.R")
+source("SPM_Panel.R")
+source("PCAplots.R")
+source("TestSet.R")
+
+# Data Procesing
+
+## Create list of dataframes
+acts <- file.inputl(traindir)
+
+
+## Combine all data into a single dataframe
+
+totacts <- combine.data(acts)
+
+## Process data variables to be easier to work with
+### TYPE
+totacts$TYPE <- factor(totacts$TYPE, labels = c("Derailment", "HeadOn", "Rearend", "Side", "Raking", "BrokenTrain", "Hwy-Rail", "GradeX", "Obstruction", "Explosive", "Fire","Other","SeeNarrative" ))
+
+### TYPEQ
+totacts$TYPEQ <- factor(totacts$TYPEQ, labels = c("Freight", "Passenger", "Commuter", "Work",  "Single", "CutofCars", "Yard", "Light", "Maint", "Other", "Other", "Other", "Other", "Other", "Other"))
+
+### WEATHER
+totacts$WEATHER <- factor(totacts$WEATHER, labels = c("clear", "cloudy", "rain", "fog", "sleet", "snow"))
+
+### VISIBLTY
+totacts$VISIBLTY <- factor(totacts$VISIBLTY, labels = c("dawn", "day", "dusk", "dark"))
+
+### Cause
+totacts$Cause <- rep(NA, nrow(totacts))
+
+totacts$Cause[which(substr(totacts$CAUSE, 1, 1) == "M")] <- "(M) Miscellaneous Causes Not Otherwise Listed"
+totacts$Cause[which(substr(totacts$CAUSE, 1, 1) == "T")] <- "(T) Rack, Roadbed and Structures"
+totacts$Cause[which(substr(totacts$CAUSE, 1, 1) == "S")] <- "(S) Signal and Communication"
+totacts$Cause[which(substr(totacts$CAUSE, 1, 1) == "H")] <- "(H) Train operation - Human Factors"
+totacts$Cause[which(substr(totacts$CAUSE, 1, 1) == "E")] <- "(E) Mechanical and Electrical Failures"
+
+totacts$Cause <- factor(totacts$Cause)
+
+### Multi Railroad
+totacts$MultiRR <- rep(NA, nrow(totacts))
+totacts$MultiRR[which(totacts$RR2 == "")] <- FALSE
+totacts$MultiRR[which(totacts$RR2 != "")] <- TRUE
+
+### Time of day
+
+for (i in 1:length(totacts)){
+  if (totacts$AMPM[i] == 'PM'){
+    totacts$Time24hr[i] <- totacts$TIMEHR[i] + 12 + totacts$TIMEMIN[i]/60
+  }
+  else{
+    totacts$Time24hr[i] <- totacts$TIMEHR[i] + totacts$TIMEMIN[i]/60
+  }
+}
+
+## Remove duplicates
+totacts_DR <- totacts[!(duplicated(totacts[, c("INCDTNO", "YEAR", "MONTH", "DAY", "TIMEHR", "TIMEMIN")])),]
+
+## Create dataframe with only accidents with 1 or more casualty
+totacts_DR$Casualty <- (totacts_DR$TOTINJ + totacts_DR$TOTKLD)
+totacts_wCasualties_DR <- subset.data.frame(totacts_DR, totacts_DR$Casualty>0)
+rownames(totacts_wCasualties_DR) <- NULL
+
+```
+
+# Exploratory Data Analysis
+## Selecting qualitative predictors
+
+```{r}
+# Exploration:
+## Accident frequency by type
+plt1 <- ggplot(as.data.frame(table(totacts_wCasualties_DR$TYPE)), 
+        aes(x = Var1, y= Freq)) + geom_bar(stat="identity") + 
+        xlab("Type") + ylab("Count")
+
+plt2 <- ggplot(totacts_wCasualties_DR,aes(TYPE,Casualty)) + 
+        geom_col(na.rm=TRUE) + xlab("Type") + ylab("Sum")
+
+plt3 <- ggplot(data = totacts_wCasualties_DR, aes(x = TYPE, y = Casualty)) +  
+        geom_boxplot() + coord_flip() + scale_fill_grey(start = 0.5, end = 0.8) +
+        theme(plot.title = element_text(hjust = 0.5)) + 
+        ggtitle("Box Plots of Equipment Damage") +labs(x = "Accident
+        Type", y = "Casualties")
+
+plt1
+plt2
+plt3
+```
+Derailment has a disproportionate total number of casualties but this could be due to the outlier that falls in that category.
+
+```{r}
+## Inspecting the extreme events
+plt_box <- ggplot(totacts_wCasualties_DR, aes(y=Casualty)) + geom_boxplot()
+upper <- ggplot_build(plt_box)$data[[1]]$ymax
+
+### Inspecting outliers:
+totacts_wCasualties_DR[191, c('TOTKLD', 'TOTINJ', 'TYPE', 'Cause', 'STATION', 
+                              "YEAR", "MONTH", "DAY")]
+
+### Removing outliers:
+totacts_wCasualties_DR_ER <- totacts_wCasualties_DR[-191,]
+```
+Apparently this derailment occurred occurred in Minot, North Dakota on January 18, 2002. According to a report released by the National Transportation Safety Board, the derailment happened after joint bars fractured. Five of the derailed cars were carrying anhydrous ammonium and ruptured which caused the vast majority of injuries. The Safety Board determined the cause of the accident to be insufficient track inspection and maintenance procedures. Crews only performed visual inspections which fail to detect small fatigue cracks (National Transportation Safety Board, 2004).
+
+We removed this accident from the analysis because we thought the magnitude would skew all of our results.
+
+```{r}
+## Inspecting for potential relationships between categorical variables
+totacts_wCasualties_DR_ER$Cas_factor <- 
+      rep(NA, nrow(totacts_wCasualties_DR_ER))
+totacts_wCasualties_DR_ER$Cas_factor[which(totacts_wCasualties_DR_ER$Casualty
+      <= 3)] <- "Less than or equal to 3 Casualties"
+totacts_wCasualties_DR_ER$Cas_factor[which(totacts_wCasualties_DR_ER$Casualty
+      > 3)] <- "Greater  to 3 Casualties (Above upper whisker)"
+totacts_wCasualties_DR_ER$Cas_factor <- 
+      factor(totacts_wCasualties_DR_ER$Cas_factor)
+
+### (SUM) What other conditions are present for each casualty?
+plt_1 <- ggplot(totacts_wCasualties_DR_ER,aes(TYPE,fill=Cause)) + 
+      geom_bar(na.rm=TRUE)+ ylab("Count")
+plt_2 <- ggplot(totacts_wCasualties_DR_ER,aes(TYPE,Casualty,fill=Cause)) + 
+      geom_col(na.rm=TRUE) + ylab("Sum")
+
+plt_1
+plt_2
+```
+The labels are a little crowded, but the tallest bar is type Highway-Rail and the second highest is type derailment. Since the cause of almost all type highway-rail accidents are miscellaneous which are a less descriptive category, we assume that the accident type will be less suited for linear modeling. We will therefore be focusing our analysis on second most prevalent accident type, derailment. We can see from this graph that the causes (T) Track, Roadbed, and Structures and (H) Train operation - Human Factors are significant. The following analyses will focus on derailment type accidents caused by Track, Roadbed, and Structures failures.
+
+```{r}
+## Interaction plots
+  #### Create Day/Not Day as a variable
+day <- rep(0, nrow(totacts_wCasualties_DR_ER))
+day[which(totacts_wCasualties_DR_ER$VISIBLTY =='day')] <- 1
+day <- as.factor(day)
+
+  #### Clear/not clear as variable
+clear <- rep(0, nrow(totacts_wCasualties_DR_ER))
+clear[which(totacts_wCasualties_DR_ER$WEATHER =='clear')] <- 1
+clear <- as.factor(clear)
+
+  #### Create derailment variable
+Derail <- rep(0, nrow(totacts_wCasualties_DR_ER))
+Derail[which(totacts_wCasualties_DR_ER$TYPE == 'Derailment')] <- 1 
+Derail <- as.factor(Derail)
+
+  #### Create passenger or commuter variable
+Pass_or_Comm <- rep(0, nrow(totacts_wCasualties_DR_ER))
+Pass_or_Comm[which(totacts_wCasualties_DR_ER$TYPEQ == 'Passenger' | 
+      totacts_wCasualties_DR_ER$TYPEQ == 'Commuter' )] <- 1 
+Pass_or_Comm <- as.factor(Pass_or_Comm)
+
+  #### Cause - Train roadbed and structures
+Cause_T <- rep(0, nrow(totacts_wCasualties_DR_ER))
+Cause_T[which(totacts_wCasualties_DR_ER$Cause ==
+      '(T) Rack, Roadbed and Structures')] <- 1
+Cause_T <- as.factor(Cause_T)
+
+
+### Plot
+#### Derailment Plots
+  # Interaction of Derailment and day
+interaction.plot(Derail, day, totacts_wCasualties_DR_ER$Casualty)
+
+  # Interaction of Derailment and clear
+interaction.plot(Derail, clear, totacts_wCasualties_DR_ER$Casualty)
+
+  # Interaction of Derailment and Pass_or_Comm
+interaction.plot(Derail, Pass_or_Comm, totacts_wCasualties_DR_ER$Casualty)
+
+  # Interaction of Derailment and Cause - Track, Roadbed, and Structures
+interaction.plot(Derail, Cause_T, totacts_wCasualties_DR_ER$Casualty)
+```
+From these plots, we see that non-day time derailments are more severe, clear visibility derailments are more severe, derailments involving passenger or commuter cars are more severe, and cause - Track, Railbed, and Structures derailments are more severe. The relationship with non-day derailments and casualties seemed interesting but this proved to be insignificant in the linear models. The clear visibility relationship is likely due to higher daytime traffic. It's unsurprising that derailments involving passenger or commuter cars yield more accidents so proving the significant of this relationship wouldn't yield actionable recommendations, and the final plot confirms that Track, Roadbed, and Structure and Derailments interact to exacerbate accident severity.
+
+
+## Selecting quantitative variables
+After working through this exploratory data analysis once and learning in the linear modeling phase that the box-cox transformed data performed better, we decided to re-do the exploratory data analysis using the transformed casualty data set.
+```{r}
+### Creating a transformed response variable
+L <- BoxCox.lambda(totacts_wCasualties_DR_ER$Casualty)
+totacts_wCasualties_DR_ER$Cas_Trans <- 
+      BoxCox(totacts_wCasualties_DR_ER$Casualty, L)
+uva.pairs(totacts_wCasualties_DR_ER[, c("Cas_Trans", "TRNSPD", "TEMP", "TONS",
+      "Time24hr", "CARS")])
+```
+The train speed variable had the highest correlation with the transformed casualty dataset indicate this could possibly be a good predictor.
+
+```{r}
+## Doing PCA to look for hidden quantitative relationships:
+totacts_wCasualties.pca <- princomp(totacts_wCasualties_DR_ER[,c("Cas_Trans",
+      "TRNSPD", "CARS", "Time24hr", "TEMP", "TONS", "MONTH")], cor = T)
+
+barplot(totacts_wCasualties.pca$loadings[,1], main='PC1 Loadings')
+
+barplot(totacts_wCasualties.pca$loadings[,3], main='PC3 Loadings')
+
+cov_cumsum <- cumplot(totacts_wCasualties.pca, col = "blue")
+```
+The transformed casualties data move with or opposite the train speed, hazardous cars, and tons variables in the first and 3rd principal components. These could also be potential predictors of casualties. However, each principal component explains a relatively low portion of the variance which indicates that the data are relatively uncorrelated so these relationships are likely not very strong.
+
+```{r}
+## Interaction plots
+### Quantitative Variables
+
+  #### Create TRNSPD variable
+TrnSpd_box <- ggplot(totacts_wCasualties_DR_ER, aes(y=TRNSPD)) + geom_boxplot()
+
+med <- ggplot_build(TrnSpd_box)$data[[1]]$middle
+
+TRNSPD.factor <- totacts_wCasualties_DR_ER$TRNSPD
+TRNSPD.factor[which(totacts_wCasualties_DR_ER$TRNSPD<med)]<-'low train speed'
+TRNSPD.factor[which(totacts_wCasualties_DR_ER$TRNSPD>=med)]<-'high train speed'
+TRNSPD.factor <- factor(TRNSPD.factor)
+
+  #### Create CARS variable
+CARS.factor <- totacts_wCasualties_DR_ER$CARS
+CARS.factor[which(totacts_wCasualties_DR_ER$CARS == 0)]<-'No Hazard Cars'
+CARS.factor[which(totacts_wCasualties_DR_ER$CARS > 0)]<-'1 or More Hazard Cars'
+CARS.factor <- factor(CARS.factor)
+
+### Plot
+ 
+#### Derailment Plots
+
+  # Interaction of Derailment and TRNSPD.factor
+interaction.plot(Derail, TRNSPD.factor, totacts_wCasualties_DR_ER$Casualty)
+
+  # Interaction of Derailment and CARS.factor
+interaction.plot(Derail, CARS.factor, totacts_wCasualties_DR_ER$Casualty)
+
+```
+
+These interaction plots indicate that we should consider CARS and TRNSPD as potential predictors and interaction terms in our model.
+
+# Hypothesis formation:
+Hypothesis 1:
+
+$H_0:$ There is no relationship or an inverse relationship between accident casualties and derailment type accidents caused by Track, Roadbed, and Structure issues.
+
+$H_1:$ There is a positive relationship between between accident casualties and derailment type accidents caused by Track, Roadbed, and Structure issues.
+
+
+# Linear Modeling
+
+## Building several models
+```{r}
+## Creating linear model with only qualitative variables
+
+## Adding variables:
+totacts_wCasualties_DR_ER$Derail <- Derail
+totacts_wCasualties_DR_ER$Cause_Trck <- Cause_T
+
+cas.lm1 <- lm(Cas_Trans~(Derail + Cause_Trck), data = totacts_wCasualties_DR_ER)
+
+summary(cas.lm1)
+
+autoplot(cas.lm1, which=1)
+autoplot(cas.lm1, which=2)
+autoplot(cas.lm1, which=6)
+```
+This simple linear model indicates that accident cause (T) has a significant positive relationship with accident damage. Derailment was not significant compared to other accident types. However, because of evidence from interaction plots, we will continue including this variable in the model in case it becomes significant once other variables are controlled for. The residuals vs. fitted and QQ plot indicate that the gaussian errors assumption is not being met. This is a recurring theme in the diagnostic plots.
+
+```{r}
+# Build a main effects model with the addition of quantitative variables.
+cas.lm2 <- lm(Cas_Trans~Derail + Cause_Trck + CARS + TRNSPD,
+      data = totacts_wCasualties_DR_ER)
+
+summary(cas.lm2)
+
+autoplot(cas.lm2, which=1)
+autoplot(cas.lm2, which=2)
+autoplot(cas.lm2, which=6)
+```
+
+When including these quantitative variables in the model, derailment becomes significant. CARS is insignificant.
+
+```{r}
+#Build a full second order model, perform step-wise regression, and perform diagnostics.
+cas.lm3 <- lm(Cas_Trans~(Derail + Cause_Trck + CARS + TRNSPD)^2 + 
+      TRNSPD^2 + CARS^2, data = totacts_wCasualties_DR_ER)
+
+cas.lm3.step <- step(cas.lm3, trace = -1)
+
+## Verify that the step-wise model is better using partial F-test
+anova(cas.lm3,cas.lm3.step)
+
+## AIC:
+AIC(cas.lm3)
+  
+AIC(cas.lm3.step)
+
+##BIC:
+AIC(cas.lm3,k=log(nrow(totacts_wCasualties_DR_ER)))
+
+AIC(cas.lm3.step,k=log(nrow(totacts_wCasualties_DR_ER)))
+```
+By the partial F-test, AIC, and BIC, the step-wise model is superior.
+
+
+```{r}
+# Diangose the stepwise model
+summary(cas.lm3.step)
+
+autoplot(cas.lm3.step, which=1)
+autoplot(cas.lm3.step, which=2)
+autoplot(cas.lm3.step, which=6)
+
+```
+In the stepwise model, all the variables but the CARS main effects variable are significant. The diagnostic plots, however, indicate lack of fit in the non-gaussian distribution of the residuals and non-constant variance.
+
+## Selecting the best model
+```{r}
+# Compare models using AIC and BIC:
+## AIC:
+AIC(cas.lm1)
+AIC(cas.lm2)
+AIC(cas.lm3.step)
+
+## BIC:
+AIC(cas.lm1,k=log(nrow(totacts_wCasualties_DR_ER)))
+AIC(cas.lm2,k=log(nrow(totacts_wCasualties_DR_ER)))
+AIC(cas.lm3.step,k=log(nrow(totacts_wCasualties_DR_ER)))
+```
+The stepwise model performs best in terms of AIC and BIC.
+
+
+```{r}
+## Test sets
+pmse.lm1.result<-NULL;
+pmse.lm2.result<-NULL;
+pmse.lm3.step.result<-NULL;
+
+for (i in c(1:100)){
+  #set test sets size: 
+  test.size<-1/3
+  # generate training sets and test sets from original data:
+  cas.data1<-test.set(totacts_wCasualties_DR_ER,test.size)
+
+  # Build model:
+  lm1.train<-lm(Cas_Trans ~ Derail + Cause_Trck, data=cas.data1$train)
+  lm2.train<-lm(Cas_Trans ~ Derail + Cause_Trck + CARS + 
+      TRNSPD, data=cas.data1$train)
+  lm3.train<-lm(Cas_Trans ~ Derail + Cause_Trck + CARS + TRNSPD + 
+      Derail:CARS + Derail:TRNSPD + Cause_Trck:TRNSPD + CARS:TRNSPD, 
+      data=cas.data1$trai)
+  
+  # Predict
+  lm1.pred<-predict(lm1.train,newdata=cas.data1$test) 
+  lm2.pred<-predict(lm2.train,newdata=cas.data1$test)
+  lm3.pred<-predict(lm3.train,newdata=cas.data1$test)
+  
+  # compute PMSE:
+  pmse.lm1<-mse(lm1.pred,cas.data1$test$Cas_Trans)
+  pmse.lm2<-mse(lm2.pred,cas.data1$test$Cas_Trans)
+  pmse.lm3<-mse(lm3.pred,cas.data1$test$Cas_Trans)
+  
+  # Add the PMSE for this run into your vector to store PMSE
+  pmse.lm1.result<-c(pmse.lm1.result,pmse.lm1)
+  pmse.lm2.result<-c(pmse.lm2.result,pmse.lm2)
+  pmse.lm3.step.result<-c(pmse.lm3.step.result,pmse.lm3)
+}
+
+### Plot results method 2 with ggplot
+Index <- 1:length(pmse.lm1.result);
+df <- data.frame(Index,pmse.lm1.result,pmse.lm2.result, pmse.lm3.step.result)
+ggplot(data=df, aes(x=Index)) + geom_line(aes(y = pmse.lm1.result), 
+      color = 'blue', size = 1) + geom_line(aes(y = pmse.lm2.result), 
+      color = 'red', linetype = 'twodash', size = 1) + 
+      geom_line(aes(y = pmse.lm3.step.result), color = 'green',size = 1) + 
+      ggtitle("Model Comparison Based on PMSE") + 
+      theme(plot.title = element_text(hjust = 0.5), 
+      plot.caption =element_text(hjust = 0.5)) + 
+      scale_color_discrete(name = "Models", 
+            labels = c("Model 1", "Model 2", "Model 3"))
+
+print("Average PMSE: simple model with only qualitative variables")
+mean(pmse.lm1.result)
+print("Average PMSE: main effects model with qualitative and 
+      quantitative variables")
+mean(pmse.lm2.result)
+print("Average PMSE: Stepwise model")
+mean(pmse.lm3.step.result)
+
+```
+In the above graph, the blue line represents the simple linear model with only qualitative variables; the red dashed line represents the main effects model with the qualitative and quantitative variables; and the green line represents the step wise model. It's clear from the AIC, BIC, and the comparison of average test set performance that the step wise model is best.
+
+
+# Conslusions
+Upon finding positive interaction terms with derailment and CARS and derailment and TRNSPD, we reject the null hypothesis that there is no relationship or an inverse relationship between accident casualties and derailment type accidents as speed increases and as the number of hazmat carrying cars increases. As a measure to reduce accident casualties, we suggest that the FRA reduces train speed.
+
+
+# Future work
+* Future work might include a deeper look into highway rail accidents to figure out whether linear modeling could help lead to recommendations to reduce accident severity of this type. In a preliminary exploratory data analysis, we failed to notice any significant interaction between the highway rail accident type and many other qualitative and quantitative variables including: VISIBILITY, WEATHER, TYPEQ, TRNSPD, CARS, and TONS.
+* Since derailments of cars carrying hazmat increases casualties, perform logistical modeling to identify factors that increase the probability of train derailments and control for those factors when hazmat cars are present.
+
+
+
+# Works Cited
+National Transportation Safety Board. (2004). Derailment of Canadian Pacific Railway Freight Train 292-16 and Subsequent Release of Anhydrous Ammonia Near Minot, North Dakota January 18, 2002 (No. PB2004-916301; p. 92). National Transportation Safety Board.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
