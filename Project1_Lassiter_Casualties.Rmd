@@ -39,13 +39,12 @@ library(data.table)
 library(gplots)
 library(boot)
 source("http://www.phaget4.org/R/myImagePlot.R")
+# install.packages('forecast', dependencies = TRUE)
+library(forecast)
 
 #Set directories:
-setwd('..')
-wd <- getwd()
-
-sourcedir <- paste0(wd, "/Source/")
-traindir <-  paste0(wd, "/Data/TrainData")
+sourcedir <- "C:/Users/Daniel/Dropbox/Self organization/Education/UVA/Graduate School/Coursework/Fall_2020/SYS 6021 Linear Statistical Models/Source"
+traindir <- "C:/Users/Daniel/Dropbox/Self organization/Education/UVA/Graduate School/Coursework/Fall_2020/SYS 6021 Linear Statistical Models/Data/TrainData"
 
 
 # Source AccidentInput
@@ -53,6 +52,7 @@ setwd(sourcedir)
 source("AccidentInput.R")
 source("SPM_Panel.R")
 source("PCAplots.R")
+source("TestSet.R")
 
 # Data Procesing
 
@@ -113,18 +113,6 @@ totacts_DR$Casualty <- (totacts_DR$TOTINJ + totacts_DR$TOTKLD)
 totacts_wCasualties_DR <- subset.data.frame(totacts_DR, totacts_DR$Casualty>0)
 rownames(totacts_wCasualties_DR) <- NULL
 
-## Creating extreme accident cost dataframe
-plt_box <- ggplot(totacts_DR, aes(y=ACCDMG)) + geom_boxplot()
-upper <- ggplot_build(plt_box)$data[[1]]$ymax
-xdmg <- totacts_DR[totacts_DR$ACCDMG > upper,]
-
-### Remove 9/11
-xdmg <- xdmg[-186, ]
-
-## Creating extreme casualties dataframe
-plt_box <- ggplot(totacts_wCasualties_DR, aes(y=Casualty)) + geom_boxplot()
-upper <- ggplot_build(plt_box)$data[[1]]$ymax
-xcas <- totacts_DR[totacts_DR$ACCDMG > upper,]
 ```
 
 # Exploratory Data Analysis for Accidents with Casualties
@@ -152,7 +140,7 @@ print("Number of extreme accidents with more than 3 casualties")
 count(tib %>% filter(Casualty > upper))
 
 print("Fraction of total accidents that are above upper whisker:")
-count(tib %>% filter(Casualty > upper))/count(tib)
+# count(tib %>% filter(Casualty > upper))/count(tib)
 
 print("Fraction of total casualties that occurred in extreme accidents:")
 tot_cas <- tib %>% summarize(Casualties = sum(Casualty))
@@ -160,38 +148,43 @@ xtrm_cas <- tib %>% filter(Casualty > upper) %>% summarize(Casualties = sum(Casu
 xtrm_cas/tot_cas
 print("This means that 10% of the accidents are responsible for 64% of casualties.")
 
+### Inspecting outliers:
+totacts_wCasualties_DR[191, ]
+
+### Removing outliers:
+totacts_wCasualties_DR_ER <- totacts_wCasualties_DR[-191,]
 
 ## Inspecting for potential relationships between categorical variables
-totacts_wCasualties_DR$Cas_factor <- rep(NA, nrow(totacts_wCasualties_DR))
+totacts_wCasualties_DR_ER$Cas_factor <- rep(NA, nrow(totacts_wCasualties_DR_ER))
 
-totacts_wCasualties_DR$Cas_factor[which(totacts_wCasualties_DR$Casualty <= 3)] <- "Less than or equal to 3 Casualties"
-totacts_wCasualties_DR$Cas_factor[which(totacts_wCasualties_DR$Casualty > 3)] <- "Greater  to 3 Casualties (Above upper whisker)"
-totacts_wCasualties_DR$Cas_factor <- factor(totacts_wCasualties_DR$Cas_factor)
+totacts_wCasualties_DR_ER$Cas_factor[which(totacts_wCasualties_DR_ER$Casualty <= 3)] <- "Less than or equal to 3 Casualties"
+totacts_wCasualties_DR_ER$Cas_factor[which(totacts_wCasualties_DR_ER$Casualty > 3)] <- "Greater  to 3 Casualties (Above upper whisker)"
+totacts_wCasualties_DR_ER$Cas_factor <- factor(totacts_wCasualties_DR_ER$Cas_factor)
 
 ### (SUM) What other conditions are present for each casualty?
-plt_1 <- ggplot(totacts_wCasualties_DR,aes(TYPE,Casualty,fill=Cause)) + geom_col(na.rm=TRUE)
+plt_1 <- ggplot(totacts_wCasualties_DR_ER,aes(TYPE,Casualty,fill=Cause)) + geom_col(na.rm=TRUE)
 
-plt_2 <- ggplot(totacts_wCasualties_DR,aes(TYPE,Casualty,fill=WEATHER)) + geom_col(na.rm=TRUE)
+plt_2 <- ggplot(totacts_wCasualties_DR_ER,aes(TYPE,Casualty,fill=WEATHER)) + geom_col(na.rm=TRUE)
 
-plt_3 <- ggplot(totacts_wCasualties_DR,aes(TYPE,Casualty,fill=VISIBLTY)) + geom_col(na.rm=TRUE)
+plt_3 <- ggplot(totacts_wCasualties_DR_ER,aes(TYPE,Casualty,fill=VISIBLTY)) + geom_col(na.rm=TRUE)
 
-plt_4 <- ggplot(totacts_wCasualties_DR,aes(TYPE,Casualty,fill=Cas_factor)) + geom_col(na.rm=TRUE)
+plt_4 <- ggplot(totacts_wCasualties_DR_ER,aes(TYPE,Casualty,fill=Cas_factor)) + geom_col(na.rm=TRUE)
 
-plt_5 <- ggplot(totacts_wCasualties_DR,aes(TYPE,Casualty,fill=TYPEQ)) + geom_col(na.rm=TRUE)
+plt_5 <- ggplot(totacts_wCasualties_DR_ER,aes(TYPE,Casualty,fill=TYPEQ)) + geom_col(na.rm=TRUE)
 
-plt_6 <- ggplot(totacts_wCasualties_DR,aes(TYPE,Casualty,fill=MultiRR)) + geom_col(na.rm=TRUE)
+plt_6 <- ggplot(totacts_wCasualties_DR_ER,aes(TYPE,Casualty,fill=MultiRR)) + geom_col(na.rm=TRUE)
 ### (COUNT) What other conditions are present for each accident with a casualty?
-plt_7 <- ggplot(totacts_wCasualties_DR,aes(TYPE,fill=Cause)) + geom_bar(na.rm=TRUE)
+plt_7 <- ggplot(totacts_wCasualties_DR_ER,aes(TYPE,fill=Cause)) + geom_bar(na.rm=TRUE)
 
-plt_8 <- ggplot(totacts_wCasualties_DR,aes(TYPE,fill=WEATHER)) + geom_bar(na.rm=TRUE)
+plt_8 <- ggplot(totacts_wCasualties_DR_ER,aes(TYPE,fill=WEATHER)) + geom_bar(na.rm=TRUE)
 
-plt_9 <- ggplot(totacts_wCasualties_DR,aes(TYPE,fill=VISIBLTY)) + geom_bar(na.rm=TRUE)
+plt_9 <- ggplot(totacts_wCasualties_DR_ER,aes(TYPE,fill=VISIBLTY)) + geom_bar(na.rm=TRUE)
 
-plt_10 <- ggplot(totacts_wCasualties_DR,aes(TYPE,fill=Cas_factor)) + geom_bar(na.rm=TRUE)
+plt_10 <- ggplot(totacts_wCasualties_DR_ER,aes(TYPE,fill=Cas_factor)) + geom_bar(na.rm=TRUE)
 
-plt_11 <- ggplot(totacts_wCasualties_DR,aes(TYPE,fill=TYPEQ)) + geom_bar(na.rm=TRUE)
+plt_11 <- ggplot(totacts_wCasualties_DR_ER,aes(TYPE,fill=TYPEQ)) + geom_bar(na.rm=TRUE)
 
-plt_12 <- ggplot(totacts_wCasualties_DR,aes(TYPE,Casualty,fill=MultiRR)) + geom_col(na.rm=TRUE)
+plt_12 <- ggplot(totacts_wCasualties_DR_ER,aes(TYPE,Casualty,fill=MultiRR)) + geom_col(na.rm=TRUE)
 
 ggarrange(plt_1, plt_2, plt_3, plt_4, plt_5, plt_6, nrow = 2, ncol = 3)
 ggarrange(plt_7, plt_8, plt_9, plt_10, plt_11, plt_12, nrow = 2, ncol = 3)
@@ -208,19 +201,7 @@ print("These are the four variables with the highest correlations coefficient. U
 
 ## Doing PCA to look for hidden quantitative relationships:
 # Perform PCA using the correlation matrix
-totacts_wCasualties.pca <- princomp(totacts_wCasualties_DR[,c("Casualty", "TRNSPD", "CARS", "Time24hr", "TEMP", "TONS", "MONTH")], cor = T)
-
-ggbiplot(totacts_wCasualties.pca, varname.size = 5, labels=row(totacts_wCasualties_DR)[,1], main="Biplot")
-
-### Inspecting outliers:
-totacts_wCasualties_DR[191, ]
-
-
-### Removing outliers:
-
-df <- totacts_wCasualties_DR[-191,]
-
-totacts_wCasualties.pca <- princomp(df[,c("Casualty", "TRNSPD", "CARS", "Time24hr", "TEMP", "TONS", "MONTH")], cor = T)
+totacts_wCasualties.pca <- princomp(totacts_wCasualties_DR_ER[,c("Casualty", "TRNSPD", "CARS", "Time24hr", "TEMP", "TONS", "MONTH")], cor = T)
 
 ggbiplot(totacts_wCasualties.pca, varname.size = 5, labels=NULL[,1], main="Biplot", alpha = 0.1)
 
@@ -230,15 +211,12 @@ barplot(totacts_wCasualties.pca$loadings[,1], main="PC1 Loadings")
 barplot(totacts_wCasualties.pca$loadings[,2], main='PC2 Loadings')
 barplot(totacts_wCasualties.pca$loadings[,3], main='PC3 Loadings')
 
-print("The loading on casualty is relatively insignificant until the 3rd PC where it moves with trainspeed, # of hazard cars, and 24 hour time of day.")
+cov_cumsum <- cumplot(totacts_wCasualties.pca, col = "blue")
+
+print("The loading on casualty is relatively insignificant until the 3rd PC where it moves with trainspeed, # of hazard cars, and 24 hour time of day. The cumulative variance plot shows that the 3rd PC explains a similar portion of variance to the first 2.")
 
 
 ## Interaction plots
-### Decided to work with the dataframe with the most extreme accident removed
-totacts_wCasualties_DR_ER <- df
-
-
-
 ### Define qualitative variables
   #### Create Day/Not Day as a variable
 day <- rep(0, nrow(totacts_wCasualties_DR_ER))
@@ -271,10 +249,10 @@ Pass_or_Comm <- as.factor(Pass_or_Comm)
 contrasts(Pass_or_Comm)
 
   #### Cause - Train roadbed and structures
-clear <- rep(0, nrow(totacts_wCasualties_DR_ER))
-clear[which(totacts_wCasualties_DR_ER$WEATHER =='clear')] <- 1
-clear <- as.factor(clear)
-contrasts(clear)
+Cause <- rep(0, nrow(totacts_wCasualties_DR_ER))
+Cause[which(totacts_wCasualties_DR_ER$Cause =='(T) Rack, Roadbed and Structures')] <- 1
+Cause <- as.factor(Cause)
+contrasts(Cause)
 
 
 ### Quantitative Variables
@@ -333,23 +311,26 @@ interaction.plot(HwyRail, TONS.factor, totacts_wCasualties_DR_ER$Casualty)
 
 
 #### Derailment Plots
-  # Interaction of highway rail and day
+  # Interaction of Derailment and day
 interaction.plot(Derail, day, totacts_wCasualties_DR_ER$Casualty)
 
-  # Interaction of highway rail and clear
+  # Interaction of Derailment and clear
 interaction.plot(Derail, clear, totacts_wCasualties_DR_ER$Casualty)
 
-  # Interaction of highway rail and Pass_or_Comm
+  # Interaction of Derailment and Pass_or_Comm
 interaction.plot(Derail, Pass_or_Comm, totacts_wCasualties_DR_ER$Casualty)
 
-  # Interaction of highway rail and TRNSPD.factor
+  # Interaction of Derailment and TRNSPD.factor
 interaction.plot(Derail, TRNSPD.factor, totacts_wCasualties_DR_ER$Casualty)
 
-  # Interaction of highway rail and CARS.factor
+  # Interaction of Derailment and CARS.factor
 interaction.plot(Derail, CARS.factor, totacts_wCasualties_DR_ER$Casualty)
 
-  # Interaction of highway rail and TONS.factor
+  # Interaction of Derailment and TONS.factor
 interaction.plot(Derail, TONS.factor, totacts_wCasualties_DR_ER$Casualty)
+
+  # Interaction of Derailment and Cause - Track, Roadbed, and Structures
+interaction.plot(Derail, Cause, totacts_wCasualties_DR_ER$Casualty)
 
 
 #### Passenger or Commuter
@@ -368,6 +349,9 @@ interaction.plot(Pass_or_Comm, CARS.factor, totacts_wCasualties_DR_ER$Casualty)
   # Interaction of Passenger or Commuter and TONS.factor
 interaction.plot(Pass_or_Comm, TONS.factor, totacts_wCasualties_DR_ER$Casualty)
 
+  # Interaction of Passenger or Commuter and Cause - Track, Roadbed, and Structures
+interaction.plot(Pass_or_Comm, Cause, totacts_wCasualties_DR_ER$Casualty)
+
 print("Looking at highway-rail interactions, it seems like non-highway rail accidents are worse on average which makes sense given the previous observation that derailment accidents in particular are worse per accident on average.")
 
 print("Looking at derailment interactions, low tonnage accidents are worse on average which is probably because passengar cars weigh less than non-passenger cars on average. This interaction doesn't tell us much but we may still choose to model it. The involvement of one or more hazard cars increases average casualties so this might be good to include. High train speed clearly has a strong interaction with derailment type accidents. Passenger or commuter train involvement increase severity. Most severe accidents happen during clear weather. Finally, daytime accidents are more severe on average.")
@@ -378,6 +362,8 @@ print("Looking at passenger or commuter train type accidents, lower tonnage is a
 ###### Most important plots pasted for convenience:
   # 3rd PC Loadings
 barplot(totacts_wCasualties.pca$loadings[,3], main='PC3 Loadings')
+
+cov_cumsum <- cumplot(totacts_wCasualties.pca, col = "blue")
 
   # Interaction of highway rail and TONS.factor
 interaction.plot(Derail, TONS.factor, totacts_wCasualties_DR_ER$Casualty)
@@ -391,6 +377,12 @@ interaction.plot(Derail, TRNSPD.factor, totacts_wCasualties_DR_ER$Casualty)
   # Interaction of highway rail and Pass_or_Comm
 interaction.plot(Derail, Pass_or_Comm, totacts_wCasualties_DR_ER$Casualty)
 
+  # Interaction of Passenger or Commuter and Cause - Track, Roadbed, and Structures
+interaction.plot(Pass_or_Comm, Cause, totacts_wCasualties_DR_ER$Casualty)
+
+  # Interaction of Derailment and Cause - Track, Roadbed, and Structures
+interaction.plot(Derail, Cause, totacts_wCasualties_DR_ER$Casualty)
+
 ggarrange(plt_1, plt_2, plt_3, plt_4, plt_5, plt_6, nrow = 2, ncol = 3)
 ggarrange(plt_7, plt_8, plt_9, plt_10, plt_11, plt_12, nrow = 2, ncol = 3)
 
@@ -398,10 +390,244 @@ ggarrange(plt_7, plt_8, plt_9, plt_10, plt_11, plt_12, nrow = 2, ncol = 3)
 
 # Hypothesis formation:
 Hypothesis 1:
+$H_0:$ There is no relationship or an inverse relationship between accident severity in terms of number of casualties and derailment type accidents involving passenger or commuter cars caused by Track, Roadbed, and Structure issues which interact with train speed and the presence of hazmat cars.
+$H_1:$ There is a positive relationship between between accident severity in terms of number of casualties and these variables.
+
+(Not using)
+Hypothesis 2:
+$H_0:$ There is no interaction between derailment type accidents involving passenger or commuter cars and the number of hazard cars involved and train speed affecting accident severity.
+$H_1:$ There is an interaction between derailment type accidents involving passenger or commuter cars and the number of hazard cars involved and train speed affecting accident severity.
+
+
+
+# Analysis:
+```{r}
+# Build a simple main effects model
+## Transformations
+### Is the response variable gaussian?
+plt1 <- ggplot(as.data.frame(totacts_wCasualties_DR_ER$Casualty), aes(sample=totacts_wCasualties_DR_ER$Casualty)) + stat_qq() + stat_qq_line() + ggtitle("Casualties") + theme(plot.title = element_text(hjust = 0.5))
+plt1
+print("The response variable is not gaussian so a transformation is needed.")
+
+### Creating a transformed response variable
+L <- BoxCox.lambda(totacts_wCasualties_DR_ER$Casualty)
+totacts_wCasualties_DR_ER$Cas_Trans <- BoxCox(totacts_wCasualties_DR_ER$Casualty, L)
+
+### Does the transformed variable look better?
+plt2 <- ggplot(as.data.frame(totacts_wCasualties_DR_ER$Cas_Trans), aes(sample=totacts_wCasualties_DR_ER$Cas_Trans)) + stat_qq() + stat_qq_line() + ggtitle("Casualties") + theme(plot.title = element_text(hjust = 0.5))
+ggarrange(plt1, plt2, ncol = 2)
+
+## Adding variables:
+totacts_wCasualties_DR_ER$Derail <- Derail
+totacts_wCasualties_DR_ER$Pass_or_Comm <- Pass_or_Comm
+totacts_wCasualties_DR_ER$Cause_Trck <- Cause
+totacts_wCasualties_DR_ER$Day <- day
+totacts_wCasualties_DR_ER$Clear <- clear
+
+## Creating linear model with only qualitative variables
+cas.lm1 <- lm(Cas_Trans~(Derail + Cause_Trck), data = totacts_wCasualties_DR_ER)
+
+summary(cas.lm1)
+
+autoplot(cas.lm1, which=1)
+autoplot(cas.lm1, which=2)
+autoplot(cas.lm1, which=6)
+
+print("Cause - Track, Roadbed, and Structures increase casualties. Derailments seems to be insignficant. This plot has the best looking residuals vs. fitted plot.")
+
+# Build a model with the addition of quantitative variables.
+cas.lm2 <- lm(Cas_Trans~Derail + Cause_Trck + CARS + TRNSPD, data = totacts_wCasualties_DR_ER)
+
+summary(cas.lm2)
+
+autoplot(cas.lm2, which=1)
+autoplot(cas.lm2, which=2)
+autoplot(cas.lm2, which=6)
+
+print("Derailment has become significant CARS is the only insignificant variable. The addition of the quantiative variables made type - Derailment significant. The residuals vs. fitted plot might indicate problems of fit.")
+
+#Build a full second order model, perform step-wise regression, and diagnose the superior model.
+cas.lm3 <- lm(Cas_Trans~(Derail + Cause_Trck + CARS + TRNSPD)^2 + TRNSPD^2 + CARS^2, data = totacts_wCasualties_DR_ER)
+summary(cas.lm3)
+
+cas.lm3.step <- step(cas.lm3)
+summary(cas.lm3.step)
+
+## Verify that the step-wise model is better using partial F-test
+anova(cas.lm3,cas.lm3.step)
+print("I fail to reject the null hypothesis that the extra coefficients are equal to 0 which indicates that the smaller model is superior.")
+
+## AIC:
+AIC(cas.lm3)
+  
+AIC(cas.lm3.step)
+
+##BIC:
+  
+AIC(cas.lm3,k=log(nrow(totacts_wCasualties_DR_ER)))
+
+AIC(cas.lm3.step,k=log(nrow(totacts_wCasualties_DR_ER)))
+
+print("The AIC and BIC both indicate that the smaller model is better.")
+
+autoplot(cas.lm3.step, which=1)
+autoplot(cas.lm3.step, which=2)
+autoplot(cas.lm3.step, which=6)
+
+print("The cook's vs. leverage plot indicates that point 1512 is an outlier. I'm going to remove this point and re-build the model.")
+
+df <- totacts_wCasualties_DR_ER[-which.max(cooks.distance(cas.lm3.step)), ]
+
+## Re-do modeling with the dataframe with high-cook's-distance points removed.
+cas.lm4 <- lm(Cas_Trans~(Derail + Cause_Trck + CARS + TRNSPD)^2 + TRNSPD^2 + CARS^2, data = df)
+summary(cas.lm4)
+
+cas.lm4.step <- step(cas.lm4)
+summary(cas.lm4.step)
+
+### Verify step-wise moodel is superior.
+anova(cas.lm4,cas.lm4.step)
+print("I fail to reject the null hypothesis that the extra coefficients are equal to 0 which indicates that the smaller model is superior.")
+
+### AIC:
+AIC(cas.lm4)
+  
+AIC(cas.lm4.step)
+
+###BIC:
+  
+AIC(cas.lm4,k=log(nrow(df)))
+
+AIC(cas.lm4.step,k=log(nrow(df)))
+
+print("The AIC and BIC both indicate that the smaller model is better.")
+
+autoplot(cas.lm4.step, which=1)
+autoplot(cas.lm4.step, which=2)
+autoplot(cas.lm4.step, which=6)
+
+
+# Compare models using AIC, BIC, and test sets:
+## AIC:
+AIC(cas.lm1)
+AIC(cas.lm2)
+AIC(cas.lm4.step)
+
+## BIC:
+  
+AIC(cas.lm1,k=log(nrow(totacts_wCasualties_DR_ER)))
+AIC(cas.lm2,k=log(nrow(totacts_wCasualties_DR_ER)))
+AIC(cas.lm4.step,k=log(nrow(df)))
+
+
+
+###########################
+summary(cas.lm1)
+summary(cas.lm2)
+summary(cas.lm4.step)
+
+
+###########################
+
+print("Based on AIC and BIC, the stepwise model built fromt he full second order model performs best across all 3 models.")
+
+## Test sets
+pmse.lm1.result<-NULL;
+pmse.lm2.result<-NULL;
+pmse.lm4.step.result<-NULL;
+
+for (i in c(1:100)){
+  #set test sets size: 
+  test.size<-1/3
+  # generate training sets and test sets from original data:
+  cas.data1<-test.set(totacts_wCasualties_DR_ER,test.size)
+  cas.data2<-test.set(df,test.size)
+
+  
+  # Build model:
+  ## First dataset
+  lm1.train<-lm(Cas_Trans ~ Derail + Cause_Trck, data=cas.data1$train)
+  lm2.train<-lm(Cas_Trans ~ Derail + Cause_Trck + CARS + TRNSPD, data=cas.data1$train)
+  ## Second data set
+  lm3.train<-lm(Cas_Trans ~ Derail + Cause_Trck + CARS + TRNSPD + Derail:CARS + Derail:TRNSPD + Cause_Trck:TRNSPD + CARS:TRNSPD, 
+                data=cas.data2$train)
+  
+  # Predict
+  ## First dataset
+  lm1.pred<-predict(lm1.train,newdata=cas.data1$test) 
+  lm2.pred<-predict(lm2.train,newdata=cas.data1$test)
+  ## Second dataset
+  lm3.pred<-predict(lm3.train,newdata=cas.data2$test)
+  
+  # compute PMSE:
+  ## First dataset
+  pmse.lm1<-mse(lm1.pred,cas.data1$test$Cas_Trans)
+  pmse.lm2<-mse(lm2.pred,cas.data1$test$Cas_Trans)
+  ## Second dataset
+  pmse.lm3<-mse(lm3.pred,cas.data2$test$Cas_Trans)
+  
+  # Add the PMSE for this run into your vector to store PMSE
+  pmse.lm1.result<-c(pmse.lm1.result,pmse.lm1)
+  pmse.lm2.result<-c(pmse.lm2.result,pmse.lm2)
+  pmse.lm4.step.result<-c(pmse.lm4.step.result,pmse.lm3)
+}
+
+### Plot results method 2 with ggplot
+Index <- 1:length(pmse.lm1.result);
+df <- data.frame(Index,pmse.lm1.result,pmse.lm2.result, pmse.lm4.step.result)
+ggplot(data=df, aes(x=Index)) + geom_line(aes(y = pmse.lm1.result), color = 'blue', size = 1) + geom_line(aes(y = pmse.lm2.result), color = 'red', linetype = 'twodash', size = 1) +  geom_line(aes(y = pmse.lm4.step.result), color = 'green',size = 1) + ggtitle("Model Comparison Based on PMSE") + theme(plot.title = element_text(hjust = 0.5), plot.caption =element_text(hjust = 0.5)) + scale_color_discrete(name = "Models", labels = c("Model 1", "Model 2", "Model 3"))
+
+mean(pmse.lm1.result)
+mean(pmse.lm2.result)
+mean(pmse.lm4.step.result)
+
+dir_temp <- "C:/Users/Daniel/Desktop/Temp/_Coding"
+ggsave(filename = "Regression without cause.png", path = dir_temp)
+
+print("Model performance in this case improves with complexity. The green line representing the step-wise regression model built from the full second order model is the best.")
+
+```
+
+```{r}
+summary(cas.lm1)
+summary(cas.lm2)
+summary(cas.lm4.step)
+```
+
+# Conclusions (Continue working here):
+
+* Derail and pass_or_commute are significant in the main effects models with a positive relationship with # of casualties.
+* The interaction of derail and passenger or commuter is significant and have a positive relationship with # of casualties.
+* Train speed is significant and positively correlated with # of casualties.
+* Derailments involving cars carrying hazmat have a positive relationship with # of casualties.
+* Derailments interact with trainspeed to increase # of casualties.
+
+Hypothesis 1:
 $H_0:$ There is no relationship or an inverse relationship between derailment type accidents with passenger or commuter cars and accident severity relative to other types of accidents with other types of cars.
 $H_1:$ There is a positive relationship between derailment type accidents with passenger or commuter cars and accident severity relative to other types of accidents with other types of cars.
 
 Hypothesis 2:
 $H_0:$ There is no interaction between derailment type accidents involving passenger or commuter cars and the number of hazard cars involved and train speed affecting accident severity.
 $H_1:$ There is an interaction between derailment type accidents involving passenger or commuter cars and the number of hazard cars involved and train speed affecting accident severity.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
