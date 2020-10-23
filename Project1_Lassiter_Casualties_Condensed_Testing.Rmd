@@ -1,0 +1,145 @@
+---
+title: "Project1"
+author: "Daniel Lassiter, Tom Muhlbaur, and Rachael Stryker"
+date: "10/23/2020"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r, echo = FALSE, include=FALSE}
+#Import libraries
+library(tidyverse)
+library(tibble)
+library(dplyr)
+library(ggplot2)
+library(ggfortify)
+library(lattice)
+library(GGally)
+library(MASS)
+library(lindia)
+library(ggpubr)
+# install.packages("devtools")
+library(devtools)
+# install_github("vqv/ggbiplot")
+library(ggbiplot)
+library(data.table)
+library(gplots)
+library(boot)
+source("http://www.phaget4.org/R/myImagePlot.R")
+# install.packages('forecast', dependencies = TRUE)
+library(forecast)
+
+#Set directories:
+sourcedir <- "C:/Users/Daniel/Dropbox/Self organization/Education/UVA/Graduate School/Coursework/Fall_2020/SYS 6021 Linear Statistical Models/Source"
+traindir <- "C:/Users/Daniel/Dropbox/Self organization/Education/UVA/Graduate School/Coursework/Fall_2020/SYS 6021 Linear Statistical Models/Data/TrainData"
+
+
+# Source AccidentInput
+setwd(sourcedir)
+source("AccidentInput.R")
+source("SPM_Panel.R")
+source("PCAplots.R")
+source("TestSet.R")
+
+# Data Procesing
+
+## Create list of dataframes
+acts <- file.inputl(traindir)
+
+
+## Combine all data into a single dataframe
+
+totacts <- combine.data(acts)
+
+## Process data variables to be easier to work with
+### TYPE
+totacts$TYPE <- factor(totacts$TYPE, labels = c("Derailment", "HeadOn", "Rearend", "Side", "Raking", "BrokenTrain", "Hwy-Rail", "GradeX", "Obstruction", "Explosive", "Fire","Other","SeeNarrative" ))
+
+### TYPEQ
+totacts$TYPEQ <- factor(totacts$TYPEQ, labels = c("Freight", "Passenger", "Commuter", "Work",  "Single", "CutofCars", "Yard", "Light", "Maint", "Other", "Other", "Other", "Other", "Other", "Other"))
+
+### WEATHER
+totacts$WEATHER <- factor(totacts$WEATHER, labels = c("clear", "cloudy", "rain", "fog", "sleet", "snow"))
+
+### VISIBLTY
+totacts$VISIBLTY <- factor(totacts$VISIBLTY, labels = c("dawn", "day", "dusk", "dark"))
+
+### Cause
+totacts$Cause <- rep(NA, nrow(totacts))
+
+totacts$Cause[which(substr(totacts$CAUSE, 1, 1) == "M")] <- "(M) Miscellaneous Causes Not Otherwise Listed"
+totacts$Cause[which(substr(totacts$CAUSE, 1, 1) == "T")] <- "(T) Rack, Roadbed and Structures"
+totacts$Cause[which(substr(totacts$CAUSE, 1, 1) == "S")] <- "(S) Signal and Communication"
+totacts$Cause[which(substr(totacts$CAUSE, 1, 1) == "H")] <- "(H) Train operation - Human Factors"
+totacts$Cause[which(substr(totacts$CAUSE, 1, 1) == "E")] <- "(E) Mechanical and Electrical Failures"
+
+totacts$Cause <- factor(totacts$Cause)
+
+### Multi Railroad
+totacts$MultiRR <- rep(NA, nrow(totacts))
+totacts$MultiRR[which(totacts$RR2 == "")] <- FALSE
+totacts$MultiRR[which(totacts$RR2 != "")] <- TRUE
+
+### Time of day
+
+for (i in 1:length(totacts)){
+  if (totacts$AMPM[i] == 'PM'){
+    totacts$Time24hr[i] <- totacts$TIMEHR[i] + 12 + totacts$TIMEMIN[i]/60
+  }
+  else{
+    totacts$Time24hr[i] <- totacts$TIMEHR[i] + totacts$TIMEMIN[i]/60
+  }
+}
+
+## Remove duplicates
+totacts_DR <- totacts[!(duplicated(totacts[, c("INCDTNO", "YEAR", "MONTH", "DAY", "TIMEHR", "TIMEMIN")])),]
+
+## Create dataframe with only accidents with 1 or more casualty
+totacts_DR$Casualty <- (totacts_DR$TOTINJ + totacts_DR$TOTKLD)
+totacts_wCasualties_DR <- subset.data.frame(totacts_DR, totacts_DR$Casualty>0)
+rownames(totacts_wCasualties_DR) <- NULL
+
+```
+
+# Exploratory Data Analysis
+## Selecting qualitative predictors
+
+```{r, fig.align='center', echo=FALSE}
+# Exploration:
+## Accident frequency by type
+plt1 <- ggplot(as.data.frame(table(totacts_wCasualties_DR$TYPE)), 
+        aes(x = Var1, y= Freq)) + geom_bar(stat="identity") + 
+        xlab("Type") + ylab("Count")
+
+plt2 <- ggplot(totacts_wCasualties_DR,aes(TYPE,Casualty)) + 
+        geom_col(na.rm=TRUE) + xlab("Type") + ylab("Sum")
+
+plt3 <- ggplot(data = totacts_wCasualties_DR, aes(x = TYPE, y = Casualty)) +  
+        geom_boxplot() + coord_flip() + scale_fill_grey(start = 0.5, end = 0.8) +
+        theme(plot.title = element_text(hjust = 0.5)) + 
+        ggtitle("Box Plots of Equipment Damage") +labs(x = "Accident
+        Type", y = "Casualties")
+
+```
+
+```{r, fig.align='center', echo=FALSE, fig.cap=} 
+plt1
+```
+
+Derailment has a disproportionate total number of casualties but this could be due to the outlier that falls in that category.
+
+
+
+
+
+
+
+
+
+
+
+

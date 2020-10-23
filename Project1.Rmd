@@ -152,7 +152,7 @@ print("Number of extreme accidents with more than 3 casualties")
 count(tib %>% filter(Casualty > upper))
 
 print("Fraction of total accidents that are above upper whisker:")
-count(tib %>% filter(Casualty > upper))/count(tib)
+# count(tib %>% filter(Casualty > upper))/count(tib)
 
 print("Fraction of total casualties that occurred in extreme accidents:")
 tot_cas <- tib %>% summarize(Casualties = sum(Casualty))
@@ -202,7 +202,7 @@ print("There is a possible interaction between Derailments and Dark Visibility v
 ## Looking for correlation between quantitative variables and casualties:
 ### Variables tested: "Casualty", "TRNSPD", "TONS", "CARS", "TEMP", "POSITON2", "HEADEND1", "HEADEND2", "MIDMAN1", "MIDMAN2", "LOADF1", "LOADF2", "LOADP1", "LOADP2", "ENGRS", "FIREMEN", "CONDUCTR", "BRAKEMEN", "Latitude", "Longitud"
 
-uva.pairs(totacts_wCasualties_DR[, c("Casualty", "TRNSPD", "TEMP", "TONS", "LOADP1", "LOADP2", "Time24hr")])
+uva.pairs(totacts_wCasualties_DR[, c("Casualty", "TRNSPD", "TEMP", "TONS", "LOADP1", "LOADP2", "CARS", "CARSHZD", "Time24hr")])
 print("These are the four variables with the highest correlations coefficient. Unsurprisingly, the LOADP2 variable, number of derailed loaded passengar cars, has the highest correlation with casualty. This is another indicator that type derailment accidents are the most severe and warrant the closest scrutiny.")
 
 
@@ -391,8 +391,16 @@ interaction.plot(Derail, TRNSPD.factor, totacts_wCasualties_DR_ER$Casualty)
   # Interaction of highway rail and Pass_or_Comm
 interaction.plot(Derail, Pass_or_Comm, totacts_wCasualties_DR_ER$Casualty)
 
+  # Interaction of Passenger or Commuter and day
+interaction.plot(Pass_or_Comm, day, totacts_wCasualties_DR_ER$Casualty)
+
+  # Interaction of Passenger or Commuter and CARS.factor
+interaction.plot(Pass_or_Comm, CARS.factor, totacts_wCasualties_DR_ER$Casualty)
+
 ggarrange(plt_1, plt_2, plt_3, plt_4, plt_5, plt_6, nrow = 2, ncol = 3)
 ggarrange(plt_7, plt_8, plt_9, plt_10, plt_11, plt_12, nrow = 2, ncol = 3)
+
+############### Playing Around
 
 ```
 
